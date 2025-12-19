@@ -1,7 +1,7 @@
+
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
-import { getAnalytics } from "firebase/analytics";
 
 // Configuração do Firebase extraída do console
 const firebaseConfig = {
@@ -17,9 +17,6 @@ const firebaseConfig = {
 
 // Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
-
-// Inicializa Analytics (opcional em ambientes de desenvolvimento)
-const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 
 // Exporta as referências dos serviços conforme solicitado
 export const auth = getAuth(app);

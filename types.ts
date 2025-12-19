@@ -165,6 +165,7 @@ export interface CalendarEvent {
     date: string; // Formato YYYY-MM-DD
     time: string;
     type: 'training' | 'assessment' | 'personal' | 'global';
+    attendees?: string[]; // Lista de IDs de usuários que confirmaram
 }
 
 export interface Badge {

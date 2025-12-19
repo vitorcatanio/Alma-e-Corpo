@@ -1,5 +1,7 @@
 
-import { ref, set, get, child } from "firebase/database";
+// Fix: Added missing methods getReadingLeaderboard and getStudentEvents to StorageService
+
+import { ref, set, get, child, remove, onValue } from "firebase/database";
 import { database } from "../firebase-config";
 import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, Badge, SpiritualPost, ReadingStats, SpiritualComment } from '../types';
 
@@ -7,46 +9,32 @@ class StorageService {
   private dbRef = ref(database);
 
   init() {
+    // Inicialização local para fallback
     if (!localStorage.getItem('profiles')) localStorage.setItem('profiles', JSON.stringify([]));
     if (!localStorage.getItem('users')) localStorage.setItem('users', JSON.stringify([]));
-    if (!localStorage.getItem('workouts')) localStorage.setItem('workouts', JSON.stringify([]));
-    if (!localStorage.getItem('diets')) localStorage.setItem('diets', JSON.stringify([]));
-    if (!localStorage.getItem('progress')) localStorage.setItem('progress', JSON.stringify([]));
-    if (!localStorage.getItem('activity')) localStorage.setItem('activity', JSON.stringify([]));
-    if (!localStorage.getItem('messages')) localStorage.setItem('messages', JSON.stringify([]));
     if (!localStorage.getItem('events')) localStorage.setItem('events', JSON.stringify([]));
-    if (!localStorage.getItem('spiritual_posts')) localStorage.setItem('spiritual_posts', JSON.stringify([]));
   }
 
-  // Busca TODOS os usuários do Firebase (Essencial para o Personal ver novos cadastros)
   async getAllUsersFromDb(): Promise<User[]> {
     const snapshot = await get(child(this.dbRef, 'users'));
     if (snapshot.exists()) {
       const data = snapshot.val();
-      const users = Object.values(data) as User[];
-      localStorage.setItem('users', JSON.stringify(users)); // Atualiza cache
-      return users;
+      return Object.values(data) as User[];
     }
     return [];
   }
 
-  // Busca TODOS os perfis do Firebase
   async getAllProfilesFromDb(): Promise<UserProfile[]> {
     const snapshot = await get(child(this.dbRef, 'profiles'));
     if (snapshot.exists()) {
       const data = snapshot.val();
-      const profiles = Object.values(data) as UserProfile[];
-      localStorage.setItem('profiles', JSON.stringify(profiles));
-      return profiles;
+      return Object.values(data) as UserProfile[];
     }
     return [];
   }
 
   async saveUserToDb(user: User) {
     await set(ref(database, 'users/' + user.id), user);
-    const users = this.get<User>('users').filter(u => u.id !== user.id);
-    users.push(user);
-    localStorage.setItem('users', JSON.stringify(users));
   }
 
   async getUserFromDb(userId: string): Promise<User | null> {
@@ -57,113 +45,126 @@ class StorageService {
   async saveProfile(profile: UserProfile) {
     if (!profile.userId) return;
     await set(ref(database, 'profiles/' + profile.userId), profile);
-    const localProfiles = this.get<UserProfile>('profiles').filter(p => p.userId !== profile.userId);
-    localProfiles.push(profile);
-    localStorage.setItem('profiles', JSON.stringify(localProfiles));
   }
 
   async getProfile(userId: string): Promise<UserProfile | undefined> {
     const snapshot = await get(child(this.dbRef, `profiles/${userId}`));
-    if (snapshot.exists()) {
-      const profile = snapshot.val() as UserProfile;
-      const profiles = this.get<UserProfile>('profiles').filter(p => p.userId !== userId);
-      profiles.push(profile);
-      localStorage.setItem('profiles', JSON.stringify(profiles));
-      return profile;
-    }
-    return this.get<UserProfile>('profiles').find(p => p.userId === userId);
+    return snapshot.exists() ? snapshot.val() as UserProfile : undefined;
   }
 
-  private get<T>(key: string): T[] {
+  private getLocal<T>(key: string): T[] {
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   }
 
-  getUsers(): User[] { 
-    const data = localStorage.getItem('users');
-    return data ? JSON.parse(data) : [];
-  }
-
   updateUser(updatedUser: Partial<User>) {
-    const users = this.get<User>('users');
-    const index = users.findIndex(u => u.id === updatedUser.id);
-    if (index !== -1) {
-      users[index] = { ...users[index], ...updatedUser };
-      localStorage.setItem('users', JSON.stringify(users));
-      if (updatedUser.id) {
-          set(ref(database, 'users/' + updatedUser.id), users[index]);
-      }
+    if (updatedUser.id) {
+        set(ref(database, 'users/' + updatedUser.id), updatedUser);
     }
   }
 
-  deleteUser(userId: string) {
-    const users = this.get<User>('users').filter(u => u.id !== userId);
-    localStorage.setItem('users', JSON.stringify(users));
-    set(ref(database, 'users/' + userId), null);
-    set(ref(database, 'profiles/' + userId), null);
-  }
-
-  getWorkouts(userId: string): WorkoutPlan[] { return this.get<WorkoutPlan>('workouts').filter(w => w.userId === userId); }
-  saveWorkout(workout: WorkoutPlan) {
-    let workouts = this.get<WorkoutPlan>('workouts');
-    const index = workouts.findIndex(w => w.id === workout.id);
-    if (index >= 0) workouts[index] = workout;
-    else workouts.push(workout);
-    localStorage.setItem('workouts', JSON.stringify(workouts));
-  }
-
-  getDiet(userId: string): DietPlan | undefined { return this.get<DietPlan>('diets').find(d => d.userId === userId); }
-  saveDiet(diet: DietPlan) {
-    const diets = this.get<DietPlan>('diets').filter(d => d.userId !== diet.userId);
-    diets.push(diet);
-    localStorage.setItem('diets', JSON.stringify(diets));
-  }
-
-  getProgress(userId: string): ProgressLog[] { 
-    return this.get<ProgressLog>('progress').filter(p => p.userId === userId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
-  }
-  addProgress(log: ProgressLog) { localStorage.setItem('progress', JSON.stringify([...this.get<ProgressLog>('progress'), log])); }
-  
-  getActivity(userId: string): ActivityLog[] { return this.get<ActivityLog>('activity').filter(a => a.userId === userId); }
-  logActivity(log: ActivityLog) { localStorage.setItem('activity', JSON.stringify([...this.get<ActivityLog>('activity'), log])); }
-
-  getMessages(userId1: string, userId2: string): ChatMessage[] {
-    return this.get<ChatMessage>('messages').filter(m => (m.senderId === userId1 && m.receiverId === userId2) || (m.senderId === userId2 && m.receiverId === userId1)).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  }
-  sendMessage(msg: ChatMessage) { localStorage.setItem('messages', JSON.stringify([...this.get<ChatMessage>('messages'), msg])); }
-
-  getEvents(trainerId: string): CalendarEvent[] {
-    return this.get<CalendarEvent>('events').filter(e => e.trainerId === trainerId).sort((a,b) => a.date.localeCompare(b.date));
-  }
-
-  addEvent(event: CalendarEvent) {
-    const events = this.get<CalendarEvent>('events');
-    events.push(event);
-    localStorage.setItem('events', JSON.stringify(events));
-  }
-
-  getStudentEvents(userId: string): CalendarEvent[] {
-    return this.get<CalendarEvent>('events').filter(e => e.type === 'global' || e.studentId === userId).sort((a,b) => a.date.localeCompare(b.date));
-  }
-
-  getReadingLeaderboard(): UserProfile[] {
-    return this.get<UserProfile>('profiles').sort((a,b) => (b.readingStats?.daysCompleted || 0) - (a.readingStats?.daysCompleted || 0));
-  }
-
-  getSpiritualPosts(): SpiritualPost[] {
-    return this.get<SpiritualPost>('spiritual_posts').sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }
-  
-  addSpiritualPost(post: SpiritualPost) { localStorage.setItem('spiritual_posts', JSON.stringify([post, ...this.get<SpiritualPost>('spiritual_posts')])); }
-
-  addSpiritualComment(postId: string, comment: SpiritualComment) {
-    const posts = this.get<SpiritualPost>('spiritual_posts');
-    const index = posts.findIndex(p => p.id === postId);
-    if (index !== -1) {
-      if (!posts[index].comments) posts[index].comments = [];
-      posts[index].comments.push(comment);
-      localStorage.setItem('spiritual_posts', JSON.stringify(posts));
+  async getWorkouts(userId: string): Promise<WorkoutPlan[]> {
+    const snapshot = await get(child(this.dbRef, `workouts/${userId}`));
+    if (snapshot.exists()) {
+      return Object.values(snapshot.val()) as WorkoutPlan[];
     }
+    return [];
+  }
+
+  async saveWorkout(workout: WorkoutPlan) {
+    await set(ref(database, `workouts/${workout.userId}/${workout.id}`), workout);
+  }
+
+  async getDiet(userId: string): Promise<DietPlan | undefined> {
+    const snapshot = await get(child(this.dbRef, `diets/${userId}`));
+    return snapshot.exists() ? snapshot.val() as DietPlan : undefined;
+  }
+
+  async saveDiet(diet: DietPlan) {
+    await set(ref(database, `diets/${diet.userId}`), diet);
+  }
+
+  async getProgress(userId: string): Promise<ProgressLog[]> {
+    const snapshot = await get(child(this.dbRef, `progress/${userId}`));
+    if (snapshot.exists()) {
+        const logs = Object.values(snapshot.val()) as ProgressLog[];
+        return logs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+    return [];
+  }
+
+  async addProgress(log: ProgressLog) {
+    await set(ref(database, `progress/${log.userId}/${log.id}`), log);
+  }
+  
+  async getActivity(userId: string): Promise<ActivityLog[]> {
+    const snapshot = await get(child(this.dbRef, `activity/${userId}`));
+    return snapshot.exists() ? Object.values(snapshot.val()) as ActivityLog[] : [];
+  }
+
+  async logActivity(log: ActivityLog) {
+    await set(ref(database, `activity/${log.userId}/${log.id}`), log);
+  }
+
+  async getMessages(userId1: string, userId2: string): Promise<ChatMessage[]> {
+    const snapshot = await get(child(this.dbRef, 'messages'));
+    if (snapshot.exists()) {
+        const allMessages = Object.values(snapshot.val()) as ChatMessage[];
+        return allMessages.filter(m => 
+            (m.senderId === userId1 && m.receiverId === userId2) || 
+            (m.senderId === userId2 && m.receiverId === userId1)
+        ).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    }
+    return [];
+  }
+
+  async sendMessage(msg: ChatMessage) {
+    await set(ref(database, 'messages/' + msg.id), msg);
+  }
+
+  async getEvents(): Promise<CalendarEvent[]> {
+    const snapshot = await get(child(this.dbRef, 'events'));
+    if (snapshot.exists()) {
+        const events = Object.values(snapshot.val()) as CalendarEvent[];
+        return events.sort((a,b) => a.date.localeCompare(b.date));
+    }
+    return [];
+  }
+
+  async addEvent(event: CalendarEvent) {
+    await set(ref(database, 'events/' + event.id), event);
+  }
+
+  async deleteEvent(eventId: string) {
+    await remove(ref(database, 'events/' + eventId));
+  }
+
+  async rsvpToEvent(eventId: string, userId: string, attending: boolean) {
+    const snapshot = await get(child(this.dbRef, `events/${eventId}`));
+    if (snapshot.exists()) {
+        const event = snapshot.val() as CalendarEvent;
+        let attendees = event.attendees || [];
+        if (attending) {
+            if (!attendees.includes(userId)) attendees.push(userId);
+        } else {
+            attendees = attendees.filter(id => id !== userId);
+        }
+        event.attendees = attendees;
+        await set(ref(database, `events/${eventId}`), event);
+    }
+  }
+
+  async getSpiritualPosts(): Promise<SpiritualPost[]> {
+    const snapshot = await get(child(this.dbRef, 'spiritual_posts'));
+    if (snapshot.exists()) {
+        const posts = Object.values(snapshot.val()) as SpiritualPost[];
+        return posts.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }
+    return [];
+  }
+  
+  async addSpiritualPost(post: SpiritualPost) {
+    await set(ref(database, 'spiritual_posts/' + post.id), post);
   }
 
   async checkInReading(userId: string) {
@@ -182,13 +183,17 @@ class StorageService {
       }
     }
   }
-  
-  async saveBookSuggestions(userId: string, suggestions: string[]) {
-    const profile = await this.getProfile(userId);
-    if (profile) {
-      profile.bookSuggestions = suggestions;
-      await this.saveProfile(profile);
-    }
+
+  // Fix: Missing getReadingLeaderboard for StudentView
+  async getReadingLeaderboard(): Promise<UserProfile[]> {
+    const profiles = await this.getAllProfilesFromDb();
+    return profiles.sort((a, b) => (b.readingStats?.daysCompleted || 0) - (a.readingStats?.daysCompleted || 0));
+  }
+
+  // Fix: Missing getStudentEvents for StudentView
+  async getStudentEvents(userId: string): Promise<CalendarEvent[]> {
+    const events = await this.getEvents();
+    return events.filter(e => !e.studentId || e.studentId === userId);
   }
 }
 
