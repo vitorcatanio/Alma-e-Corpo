@@ -8,7 +8,7 @@ import { TrainerViewContent } from './components/TrainerView';
 import { db } from './services/storage';
 import { User, UserRole, UserProfile } from './types';
 import { auth } from './firebase-config';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { Dumbbell, AlertTriangle, RefreshCcw, Loader2 } from 'lucide-react';
 
 function SplashScreen({ onFinish }: { onFinish: () => void }) {
@@ -44,18 +44,14 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showSplash, setShowSplash] = useState(true);
   const [hasError, setHasError] = useState(false);
-  const [errorType, setErrorType] = useState<'generic' | 'permission'>('generic');
   const [isInitializing, setIsInitializing] = useState(true);
   
-  // Flag crucial para evitar que o Firebase faça login automático 
-  // enquanto o componente Auth ainda está validando o papel (role) do usuário.
   const isAuthProcessRunning = useRef(false);
 
   useEffect(() => {
     db.init();
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // Se um processo de login manual estiver ocorrendo, deixamos o Auth.tsx cuidar do estado
       if (isAuthProcessRunning.current) return;
 
       try {
@@ -70,15 +66,13 @@ function App() {
             setProfile(userProfile);
           }
         } else {
+          // Limpeza total de estados locais se não houver usuário Firebase
           setUser(null);
           setProfile(null);
         }
       } catch (e: any) {
-        console.error("Sync Error:", e);
-        if (e.message?.includes('Permission denied')) {
-            setErrorType('permission');
-            setHasError(true);
-        }
+        console.error("Critical Sync Error:", e);
+        setHasError(true);
       } finally {
         setIsInitializing(false);
       }
@@ -88,11 +82,17 @@ function App() {
   }, []);
 
   const handleLogin = (loggedInUser: User) => {
-    setUser(loggedInUser);
-    setActiveTab('dashboard'); 
-    setHasError(false);
-    // Após login bem sucedido, o processo manual termina
-    isAuthProcessRunning.current = false;
+    // Garante que o estado está limpo antes de setar o novo usuário
+    setUser(null);
+    setProfile(null);
+    
+    // Seta o novo usuário e encerra o bloqueio de processo
+    setTimeout(() => {
+        setUser(loggedInUser);
+        setActiveTab('dashboard'); 
+        setHasError(false);
+        isAuthProcessRunning.current = false;
+    }, 10);
   };
 
   const setAuthProcessStatus = (status: boolean) => {
@@ -100,11 +100,14 @@ function App() {
   };
 
   const handleLogout = async () => {
-    // Reset total do estado antes do logout para evitar "flashes" de dados antigos
+    // Reset preventivo de estados
     setUser(null);
     setProfile(null);
     setActiveTab('dashboard');
-    await auth.signOut();
+    setIsInitializing(false);
+    
+    // Logout real no Firebase
+    await signOut(auth);
   };
 
   const handleOnboardingComplete = async () => {
@@ -116,8 +119,8 @@ function App() {
 
   if (isInitializing && !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-indigo-950">
-        <Loader2 className="w-12 h-12 text-white animate-spin opacity-20" />
+      <div className="min-h-screen flex items-center justify-center bg-indigo-950 text-white">
+        <Loader2 className="w-10 h-10 animate-spin opacity-20" />
       </div>
     );
   }
@@ -128,10 +131,8 @@ function App() {
               <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-6">
                 <AlertTriangle className="w-12 h-12 text-red-500" />
               </div>
-              <h2 className="text-3xl font-black mb-2 text-slate-900">Erro de Sincronização</h2>
-              <button onClick={() => window.location.reload()} className="bg-white border-2 border-slate-200 text-slate-900 px-8 py-4 rounded-2xl font-black flex items-center gap-2">
-                <RefreshCcw className="w-5 h-5" /> Tentar Novamente
-              </button>
+              <h2 className="text-3xl font-black mb-2 text-slate-900">Falha de Conexão</h2>
+              <button onClick={() => window.location.reload()} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black">Tentar Novamente</button>
           </div>
       );
   }

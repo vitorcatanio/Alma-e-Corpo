@@ -5,6 +5,7 @@ import {
     setPersistence, 
     browserLocalPersistence, 
     browserSessionPersistence,
+    signOut,
     UserCredential, 
     User as FirebaseUser 
 } from "firebase/auth";
@@ -17,6 +18,9 @@ import { UserRole } from "./types";
  */
 export const cadastrarUsuario = async (email: string, password: string, nome: string, role: UserRole): Promise<UserCredential> => {
     try {
+        // Garante que não haja sessão ativa antes de criar novo usuário
+        await signOut(auth);
+        
         // Por padrão, novos cadastros usam persistência local para conveniência
         await setPersistence(auth, browserLocalPersistence);
         
@@ -44,6 +48,9 @@ export const cadastrarUsuario = async (email: string, password: string, nome: st
  */
 export const fazerLogin = async (email: string, password: string, lembrarMe: boolean): Promise<FirebaseUser | undefined> => {
     try {
+        // CRITICAL: Limpa qualquer sessão anterior para evitar conflitos de cache
+        await signOut(auth);
+        
         // Define o tipo de persistência antes de realizar o login
         const persistenceType = lembrarMe ? browserLocalPersistence : browserSessionPersistence;
         await setPersistence(auth, persistenceType);
