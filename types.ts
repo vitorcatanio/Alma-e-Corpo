@@ -34,6 +34,7 @@ export interface Measurements {
 
 export interface ReadingStats {
     daysCompleted: number;
+    totalChaptersRead: number;
     streak: number;
     lastReadDate: string;
 }

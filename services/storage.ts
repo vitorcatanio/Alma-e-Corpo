@@ -96,7 +96,6 @@ class StorageService {
   }
   addProgress(log: ProgressLog) { this.setLocal('progress', [...this.getLocal<ProgressLog>('progress'), log]); }
 
-  // Retrieves the activity history for a specific user
   getActivity(userId: string): ActivityLog[] {
     return this.getLocal<ActivityLog>('activity').filter(a => a.userId === userId);
   }
@@ -154,7 +153,6 @@ class StorageService {
 
   addToWishlist(wish: WishlistBook) {
     const wishlist = this.getLocal<WishlistBook>('book_wishlist');
-    // Evitar duplicados
     if (!wishlist.find(w => w.userId === wish.userId && w.title === wish.title)) {
         this.setLocal('book_wishlist', [...wishlist, wish]);
     }
@@ -165,30 +163,42 @@ class StorageService {
   }
 
   getReadingLeaderboard(): UserProfile[] {
-    return this.getLocal<UserProfile>('profiles').sort((a,b) => (b.readingStats?.daysCompleted || 0) - (a.readingStats?.daysCompleted || 0));
+    return this.getLocal<UserProfile>('profiles').sort((a,b) => {
+        const aChapters = a.readingStats?.totalChaptersRead || 0;
+        const bChapters = b.readingStats?.totalChaptersRead || 0;
+        if (bChapters !== aChapters) return bChapters - aChapters;
+        return (b.readingStats?.streak || 0) - (a.readingStats?.streak || 0);
+    });
   }
 
-  async checkInReading(userId: string) {
+  async checkInReading(userId: string, chaptersRead: number = 1) {
     const profile = await this.getProfile(userId);
     if (profile) {
-      if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, streak: 0, lastReadDate: '' };
+      if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '' };
       const today = new Date().toISOString().split('T')[0];
+      
+      // Se não leu hoje ainda, incrementa dias e streak
       if (profile.readingStats.lastReadDate !== today) {
         profile.readingStats.daysCompleted += 1;
         profile.readingStats.streak += 1;
         profile.readingStats.lastReadDate = today;
-        profile.points = (profile.points || 0) + 50;
-        await this.saveProfile(profile);
       }
+      
+      // Soma os capítulos (pode ler mais de uma vez por dia)
+      profile.readingStats.totalChaptersRead += chaptersRead;
+      
+      // Limita ao máximo da bíblia (opcional, para não estourar 1.189)
+      if (profile.readingStats.totalChaptersRead > 1189) profile.readingStats.totalChaptersRead = 1189;
+
+      profile.points = (profile.points || 0) + (chaptersRead * 10); // 10 pontos por capítulo
+      await this.saveProfile(profile);
     }
   }
 
-  // Retrieves all spiritual reflection posts from the community storage
   getSpiritualPosts(): SpiritualPost[] {
     return this.getLocal<SpiritualPost>('spiritual_posts').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
 
-  // Adds a new spiritual reflection post to the community feed
   addSpiritualPost(post: SpiritualPost) {
     const posts = this.getLocal<SpiritualPost>('spiritual_posts');
     this.setLocal('spiritual_posts', [post, ...posts]);

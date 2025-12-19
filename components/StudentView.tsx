@@ -8,7 +8,7 @@ import {
     Pause, Heart, MessageCircle, Scale, Ruler, Camera, Plus, BookOpen, 
     Quote, Sparkles, Target, ChevronRight, Hash, Clock, History, Star, ThumbsUp,
     ShieldCheck, Bell, Info, Users, Flame as BurnIcon, XCircle, Bike, Library, 
-    BookMarked, BookmarkPlus, MessageSquare, Trash2
+    BookMarked, BookmarkPlus, MessageSquare, Trash2, Layers
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -62,6 +62,10 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
         .filter(log => log.date.split('T')[0] === new Date().toISOString().split('T')[0])
         .reduce((sum, log) => sum + (log.caloriesBurned || 0), 0);
 
+    const totalBibleChapters = 1189;
+    const readChapters = profile.readingStats?.totalChaptersRead || 0;
+    const progressPercent = Math.min(100, (readChapters / totalBibleChapters) * 100);
+
     switch (activeTab) {
         case 'dashboard':
             return (
@@ -77,8 +81,8 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <Card label="Peso Atual" value={`${profile.weight} kg`} icon={Scale} color="bg-indigo-500" />
                         <Card label="Calorias Ativas" value={`${Math.round(totalCaloriesToday)} kcal`} icon={BurnIcon} color="bg-rose-500" />
-                        <Card label="Dias Lidos" value={`${profile.readingStats?.daysCompleted || 0} dias`} icon={BookOpen} color="bg-amber-500" />
-                        <Card label="Livros Lidos" value={`${profile.onboardingChoices.extraReadingProgress || 0} / ${profile.onboardingChoices.extraReadingGoal || 0}`} icon={Target} color="bg-emerald-500" />
+                        <Card label="Capítulos Lidos" value={`${readChapters} / ${totalBibleChapters}`} icon={Layers} color="bg-amber-500" />
+                        <Card label="Ofensiva" value={`${profile.readingStats?.streak || 0} dias`} icon={Flame} color="bg-emerald-500" />
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -126,8 +130,14 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
                             <div className="bg-amber-50 p-8 rounded-[2rem] border border-amber-100 shadow-sm">
                                 <h3 className="text-xl font-black mb-6 flex items-center gap-2 text-amber-900"><BookOpen className="w-6 h-6 text-amber-600"/> Check-in Espiritual</h3>
                                 <div className="bg-white p-8 rounded-3xl shadow-sm space-y-4">
-                                    <div className="flex justify-between items-center mb-2"><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Leitura Diária</span><span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black">{profile.readingStats?.streak || 0} DIAS 🔥</span></div>
-                                    <button onClick={() => db.checkInReading(user.id)} className="w-full bg-amber-500 text-white py-5 rounded-2xl font-black shadow-xl hover:bg-amber-600 transition-all active:scale-95 flex items-center justify-center gap-3"><CheckCircle className="w-6 h-6" /> Marcar Lida Hoje</button>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Leitura da Bíblia</span>
+                                        <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black">{readChapters} / {totalBibleChapters}</span>
+                                    </div>
+                                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden mb-4">
+                                        <div className="h-full bg-amber-500 transition-all duration-1000 shadow-[0_0_10px_rgba(245,158,11,0.5)]" style={{ width: `${progressPercent}%` }}></div>
+                                    </div>
+                                    <button onClick={() => onTabChange('spiritual')} className="w-full bg-amber-500 text-white py-5 rounded-2xl font-black shadow-xl hover:bg-amber-600 transition-all active:scale-95 flex items-center justify-center gap-3"><Plus className="w-6 h-6" /> Registrar Capítulos</button>
                                 </div>
                             </div>
                         </div>
@@ -139,14 +149,13 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
         case 'workouts': return <WorkoutView workouts={workouts} user={user} profile={profile} />;
         case 'diet': return <DietView diet={diet} />;
         case 'progress': return <ProgressView progress={progress} user={user} onUpdate={() => setProgress(db.getProgress(user.id))} />;
-        case 'spiritual': return <SpiritualView user={user} posts={spiritualPosts} leaderboard={leaderboard} />;
+        case 'spiritual': return <SpiritualView user={user} profile={profile} posts={spiritualPosts} leaderboard={leaderboard} totalChapters={totalBibleChapters} />;
         case 'messages': return <ChatView messages={messages} user={user} trainer={trainer} onMessageSent={() => setMessages(db.getMessages(user.id, trainer?.id || ''))} />;
         case 'community': return <CommunityView posts={spiritualPosts} user={user} />;
         default: return <Inativo msg="Módulo em desenvolvimento." />;
     }
 };
 
-// --- Library Module Components ---
 const LibraryView = ({ user, profile }: { user: User, profile: UserProfile }) => {
     const [view, setView] = useState<'shelf' | 'community' | 'wishlist'>('shelf');
     const [reviews, setReviews] = useState<BookReview[]>([]);
@@ -271,7 +280,6 @@ const LibraryView = ({ user, profile }: { user: User, profile: UserProfile }) =>
                 </div>
             )}
 
-            {/* Modal de Cadastro */}
             {showAddModal && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl space-y-8">
@@ -390,7 +398,6 @@ const CommunityReviewCard = ({ review, onAddToWishlist, onComment, currentUserId
     );
 };
 
-// --- Standard UI Helpers ---
 const Card = ({ label, value, icon: Icon, color }: any) => (
     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6"><div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg`}><Icon className="w-7 h-7" /></div><div><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">{label}</p><p className="text-2xl font-black text-slate-900">{value}</p></div></div>
 );
@@ -461,20 +468,88 @@ const ProgressView = ({ progress, user, onUpdate }: any) => {
     );
 };
 
-const SpiritualView = ({ user, posts, leaderboard }: any) => {
+const SpiritualView = ({ user, profile, posts, leaderboard, totalChapters }: any) => {
     const [newPost, setNewPost] = useState('');
+    const [chaptersInput, setChaptersInput] = useState(1);
+    const readChapters = profile.readingStats?.totalChaptersRead || 0;
+    const progressPercent = Math.min(100, (readChapters / totalChapters) * 100);
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in pb-20">
             <div className="lg:col-span-2 space-y-8">
+                {/* NOVO: Widget de Progresso Bíblico */}
+                <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-8 opacity-10"><Layers className="w-32 h-32 text-indigo-900" /></div>
+                    <div className="relative z-10">
+                        <div className="flex justify-between items-end mb-6">
+                            <div>
+                                <h3 className="text-3xl font-black text-slate-900">O Caminho ao Ápice</h3>
+                                <p className="text-slate-500 font-medium italic">Faltam {totalChapters - readChapters} capítulos para concluir.</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-5xl font-black text-indigo-600">{readChapters}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Capítulos Totais</p>
+                            </div>
+                        </div>
+                        <div className="w-full h-6 bg-slate-100 rounded-full overflow-hidden border border-slate-50 p-1">
+                            <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(79,70,229,0.3)]" style={{ width: `${progressPercent}%` }}></div>
+                        </div>
+                        <div className="flex justify-between mt-3 px-1">
+                            <span className="text-[10px] font-black text-slate-300 uppercase">Gênesis 1:1</span>
+                            <span className="text-[10px] font-black text-indigo-600 uppercase">{progressPercent.toFixed(1)}% Concluído</span>
+                            <span className="text-[10px] font-black text-slate-300 uppercase">Apocalipse 22:21</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+                    <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3"><CheckCircle className="w-6 h-6 text-emerald-500" /> Registro de Leitura Diária</h3>
+                    <div className="flex flex-col md:flex-row items-center gap-6 p-6 bg-slate-50 rounded-3xl">
+                        <div className="flex-1 space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Quantos capítulos você leu agora?</label>
+                            <div className="flex items-center gap-4">
+                                <button onClick={() => setChaptersInput(Math.max(1, chaptersInput - 1))} className="w-12 h-12 bg-white rounded-xl border border-slate-100 shadow-sm font-black text-slate-500 hover:bg-slate-50 transition-all">-</button>
+                                <input type="number" className="flex-1 text-center bg-white border-2 border-indigo-100 rounded-2xl py-3 font-black text-2xl text-indigo-600 outline-none" value={chaptersInput} onChange={e => setChaptersInput(parseInt(e.target.value) || 1)} />
+                                <button onClick={() => setChaptersInput(chaptersInput + 1)} className="w-12 h-12 bg-white rounded-xl border border-slate-100 shadow-sm font-black text-slate-500 hover:bg-slate-50 transition-all">+</button>
+                            </div>
+                        </div>
+                        <button onClick={() => { db.checkInReading(user.id, chaptersInput); alert(`${chaptersInput} capítulos registrados!`); }} className="w-full md:w-auto bg-slate-900 text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-3"><Flame className="w-6 h-6 text-amber-400" /> Marcar Lidos</button>
+                    </div>
+                </div>
+
                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
                     <h3 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3"><Sparkles className="w-6 h-6 text-amber-500" /> Reflexão Diária</h3>
                     <div className="relative"><textarea className="w-full p-8 bg-slate-50 rounded-3xl border-2 border-slate-100 min-h-[160px] outline-none focus:border-indigo-500 focus:bg-white transition-all font-medium" placeholder="Qual Rhema o Senhor te deu hoje?" value={newPost} onChange={e => setNewPost(e.target.value)} /><button onClick={() => { if(newPost) { db.addSpiritualPost({ id: Date.now().toString(), userId: user.id, content: newPost, timestamp: new Date().toISOString(), likes: 0, comments: [] }); setNewPost(''); } }} className="absolute bottom-6 right-6 bg-slate-900 text-white px-8 py-3 rounded-2xl shadow-xl font-black flex items-center gap-2 transition-all active:scale-95"><Send className="w-5 h-5" /> Enviar</button></div>
                 </div>
+                
                 {posts.map((post: any) => (<div key={post.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm"><div className="flex items-center gap-4 mb-4"><div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-black text-slate-400">?</div><div><p className="font-black text-slate-900">Reflexão</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{new Date(post.timestamp).toLocaleDateString()}</p></div></div><p className="text-slate-600 leading-relaxed font-medium text-lg italic">"{post.content}"</p></div>))}
             </div>
-            <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 h-fit">
-                <h3 className="text-xl font-black text-slate-900 mb-8 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Ranking Bíblico</h3>
-                <div className="space-y-6">{leaderboard.slice(0, 5).map((p: any, idx: number) => (<div key={p.userId} className="flex items-center gap-4 group"><div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-all ${idx === 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 text-slate-400 group-hover:bg-indigo-50'}`}>{idx + 1}º</div><div className="flex-1"><p className="font-bold text-slate-900 truncate">Usuário Treyo</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{p.readingStats?.daysCompleted || 0} dias lidos</p></div></div>))}</div>
+
+            <div className="space-y-8 h-fit">
+                <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100">
+                    <h3 className="text-xl font-black text-slate-900 mb-8 flex items-center gap-2"><Trophy className="w-6 h-6 text-amber-500" /> Ranking Bíblico</h3>
+                    <div className="space-y-6">
+                        {leaderboard.slice(0, 10).map((p: any, idx: number) => (
+                            <div key={p.userId} className={`flex items-center gap-4 group p-4 rounded-2xl transition-all ${p.userId === user.id ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-slate-50'}`}>
+                                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-all ${idx === 0 ? 'bg-amber-100 text-amber-600' : idx === 1 ? 'bg-slate-100 text-slate-400' : idx === 2 ? 'bg-orange-50 text-orange-400' : 'bg-slate-50 text-slate-400'}`}>{idx + 1}º</div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="font-black text-slate-900 truncate">Usuário Treyo</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{p.readingStats?.totalChaptersRead || 0} caps</p>
+                                        <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{p.readingStats?.streak || 0} dias</p>
+                                    </div>
+                                </div>
+                                {idx === 0 && <Star className="w-5 h-5 text-amber-500 fill-current" />}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-xl">
+                    <h4 className="font-black mb-4 flex items-center gap-2"><Info className="w-5 h-5 text-indigo-400" /> Como Funciona?</h4>
+                    <p className="text-sm text-slate-400 leading-relaxed font-medium">No **TREYO**, cada capítulo conta. O ranking prioriza quem leu mais volume total da Bíblia (meta: 1.189). Em caso de empate, sua constância (ofensiva diária) decide o topo!</p>
+                </div>
             </div>
         </div>
     );
@@ -504,7 +579,6 @@ const CommunityView = ({ posts, user }: any) => {
     );
 };
 
-// --- Helpers ---
 const MacroCard = ({ label, value, unit, color }: any) => (<div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 ml-1">{label}</p><div className="flex items-baseline gap-1"><p className={`text-3xl font-black text-slate-900`}>{value}</p><p className="text-xs font-bold text-slate-300">{unit}</p></div><div className={`h-1 w-12 mt-4 rounded-full bg-${color}-500 opacity-20`}></div></div>);
 const DashboardSkeleton = () => (<div className="space-y-8 animate-pulse"><div className="h-56 bg-slate-200 rounded-[3rem]"></div><div className="grid grid-cols-1 md:grid-cols-4 gap-6"><div className="h-32 bg-slate-200 rounded-3xl"></div><div className="h-32 bg-slate-200 rounded-3xl"></div><div className="h-32 bg-slate-200 rounded-3xl"></div><div className="h-32 bg-slate-200 rounded-3xl"></div></div></div>);
 const Inativo = ({ msg }: any) => (<div className="min-h-[60vh] flex flex-col items-center justify-center p-10 text-center"><div className="w-24 h-24 bg-slate-100 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner"><ShieldCheck className="w-12 h-12 text-slate-300" /></div><h3 className="text-3xl font-black text-slate-900 mb-3">{msg}</h3><p className="text-slate-400 max-w-sm mx-auto font-medium">Sincronize seus objetivos para liberar este módulo.</p></div>);
