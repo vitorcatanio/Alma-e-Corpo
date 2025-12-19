@@ -6,7 +6,7 @@ import { fazerLogin, cadastrarUsuario } from '../auth-service';
 import { auth } from '../firebase-config';
 import { 
     Key, ArrowRight, User as UserIcon, Lock, Mail, Activity, 
-    ShieldAlert, Loader2, ExternalLink, AlertTriangle, RefreshCw, Terminal
+    ShieldAlert, Loader2, ExternalLink, RefreshCw, Check
 } from 'lucide-react';
 
 interface AuthProps {
@@ -18,6 +18,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     const [isTrainerMode, setIsTrainerMode] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [showTroubleshooting, setShowTroubleshooting] = useState(false);
+    const [lembrarMe, setLembrarMe] = useState(true);
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -41,7 +42,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             }
 
             if (isLogin) {
-                const firebaseUser = await fazerLogin(email, password);
+                const firebaseUser = await fazerLogin(email, password, lembrarMe);
                 if (firebaseUser) {
                     const userData = await db.getUserFromDb(firebaseUser.uid);
                     if (userData) {
@@ -70,15 +71,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 onLogin(newUser);
             }
         } catch (err: any) {
-            console.error("Auth System Diagnostic:", {
-                code: err.code,
-                message: err.message,
-                projectId: auth.app.options.projectId,
-                apiKey: auth.app.options.apiKey?.substring(0, 10) + "..."
-            });
+            console.error("Auth System Diagnostic:", err);
 
             let msg = err.message;
-            
             if (err.code === 'auth/operation-not-allowed') {
                 msg = "Método de login ainda bloqueado pelo Firebase.";
                 setShowTroubleshooting(true);
@@ -86,12 +81,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 msg = "Este e-mail já está em uso.";
             } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
                 msg = "E-mail ou senha incorretos.";
-            } else if (err.code === 'auth/weak-password') {
-                msg = "A senha deve ter pelo menos 6 caracteres.";
-            } else if (err.code === 'auth/invalid-email') {
-                msg = "O formato do e-mail é inválido.";
             }
-            
             setError(msg);
         } finally {
             setIsLoading(false);
@@ -106,7 +96,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
     return (
         <div className={`min-h-screen relative flex items-center justify-center p-6 overflow-hidden transition-colors duration-700 ease-in-out ${isTrainerMode ? 'bg-slate-950' : 'bg-[#F8FAFC]'}`}>
-            {/* Background Decor */}
             <div className={`absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none transition-opacity duration-700 ${isTrainerMode ? 'opacity-20' : 'opacity-100'}`}>
                 <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-200/40 rounded-full blur-[120px] animate-pulse"></div>
             </div>
@@ -130,59 +119,18 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         </div>
                         <h1 className="text-6xl font-black tracking-tighter mb-4">TREYO</h1>
                         <p className="opacity-80 text-lg max-w-xs font-medium leading-relaxed">
-                            A sincronização na nuvem permite que seus dados de treino e leitura estejam em todos os seus dispositivos.
+                            Mantenha seu foco sincronizado. Corpo e Alma em uma única plataforma.
                         </p>
                     </div>
                 </div>
 
                 <div className={`p-10 md:p-14 flex flex-col justify-center ${isTrainerMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}`}>
-                    
                     {showTroubleshooting ? (
-                        <div className="space-y-6 animate-slide-up">
-                            <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-[2rem]">
-                                <h3 className="text-red-500 font-black flex items-center gap-2 mb-2 text-sm">
-                                    <ShieldAlert className="w-5 h-5" /> DIAGNÓSTICO TÉCNICO
-                                </h3>
-                                <p className="text-xs font-bold leading-relaxed opacity-80 text-red-700">
-                                    O Firebase ainda está recusando a conexão para E-mail/Senha. 
-                                    Isso é um problema de "Infra-como-Código".
-                                </p>
-                            </div>
-
-                            <div className="bg-slate-100 p-6 rounded-3xl space-y-4">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Confirmação de Identidade:</p>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-[11px] font-mono">
-                                        <span className="font-bold">Project ID:</span>
-                                        <span className="text-indigo-600">{auth.app.options.projectId}</span>
-                                    </div>
-                                    <div className="flex justify-between text-[11px] font-mono">
-                                        <span className="font-bold">API Key:</span>
-                                        <span className="text-indigo-600">***{auth.app.options.apiKey?.slice(-6)}</span>
-                                    </div>
-                                </div>
-                                <div className="pt-2 border-t border-slate-200">
-                                    <p className="text-[10px] font-bold text-slate-500">
-                                        ⚠️ IMPORTANTE: Se o Project ID acima for diferente do ID que aparece no seu console, você está configurando o projeto errado.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <a 
-                                    href={`https://console.cloud.google.com/apis/library/identitytoolkit.googleapis.com?project=${auth.app.options.projectId}`}
-                                    target="_blank" 
-                                    className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-800 transition-all"
-                                >
-                                    <ExternalLink className="w-4 h-4" /> 1. Habilitar API no Google Cloud
-                                </a>
-                                <button 
-                                    onClick={() => window.location.reload()}
-                                    className="w-full border-2 border-slate-200 text-slate-600 py-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
-                                >
-                                    <RefreshCw className="w-4 h-4" /> 2. Recarregar App (Limpar Cache)
-                                </button>
-                            </div>
+                        <div className="space-y-6 animate-slide-up text-center">
+                            <ShieldAlert className="w-16 h-16 text-red-500 mx-auto" />
+                            <h2 className="text-xl font-bold">Erro de Infraestrutura</h2>
+                            <p className="text-sm opacity-60">O método de E-mail/Senha não está habilitado no Console do Firebase.</p>
+                            <button onClick={() => window.location.reload()} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold"><RefreshCw className="inline w-4 h-4 mr-2"/> Reiniciar App</button>
                         </div>
                     ) : (
                         <>
@@ -219,6 +167,24 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                         <input required type="password" className={`w-full pl-12 pr-4 py-4 rounded-2xl border-2 outline-none transition-all font-bold ${isTrainerMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100 focus:border-indigo-500'}`} value={password} onChange={e => setPassword(e.target.value)} />
                                     </div>
                                 </div>
+
+                                {isLogin && (
+                                    <div className="flex items-center gap-3 py-2">
+                                        <button 
+                                            type="button"
+                                            onClick={() => setLembrarMe(!lembrarMe)}
+                                            className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                                lembrarMe 
+                                                ? 'bg-indigo-600 border-indigo-600 text-white' 
+                                                : isTrainerMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                                            }`}
+                                        >
+                                            {lembrarMe && <Check className="w-4 h-4" />}
+                                        </button>
+                                        <span className="text-xs font-bold opacity-60">Mantenha-me conectado</span>
+                                    </div>
+                                )}
+
                                 {isTrainerMode && (
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black uppercase tracking-widest ml-1 text-indigo-400">Código Master</label>
