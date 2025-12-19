@@ -7,25 +7,21 @@ import { StudentViewContent } from './components/StudentView';
 import { TrainerViewContent } from './components/TrainerView';
 import { db } from './services/storage';
 import { User, UserRole } from './types';
-import { Dumbbell, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { auth } from './firebase-config';
+import { onAuthStateChanged } from 'firebase/auth';
+import { Dumbbell, AlertTriangle, RefreshCcw, Loader2 } from 'lucide-react';
 
 function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    // Sequência de animação
     const t1 = setTimeout(() => setStep(1), 500);
     const t2 = setTimeout(() => setStep(2), 2000); 
     const t3 = setTimeout(() => {
       setStep(3);
       setTimeout(onFinish, 500); 
     }, 2500);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onFinish]);
 
   return (
@@ -37,9 +33,6 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
             </div>
             <h1 className="text-5xl font-black text-white tracking-tighter">TREYO</h1>
         </div>
-        <p className={`text-indigo-300 mt-4 text-center font-light tracking-widest text-sm uppercase transition-opacity duration-700 delay-300 ${step >= 1 ? 'opacity-100' : 'opacity-0'}`}>
-          Eleve seu potencial
-        </p>
       </div>
     </div>
   );
@@ -50,24 +43,36 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDbReady, setIsDbReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
-  const [appVersion, setAppVersion] = useState(0); // Used to force re-render after onboarding
+  const [appVersion, setAppVersion] = useState(0); 
   const [hasError, setHasError] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    try {
-      // Initialize DB immediately
-      db.init();
-      setIsDbReady(true);
-      
-      // Check session
-      const storedUser = localStorage.getItem('currentUser');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+    db.init();
+    
+    // Monitora o estado de login do Firebase
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (firebaseUser) {
+          const userData = await db.getUserFromDb(firebaseUser.uid);
+          if (userData) {
+            setUser(userData);
+            localStorage.setItem('currentUser', JSON.stringify(userData));
+          }
+        } else {
+          setUser(null);
+          localStorage.removeItem('currentUser');
+        }
+      } catch (e) {
+        console.error("Auth sync error", e);
+        setHasError(true);
+      } finally {
+        setIsInitializing(false);
+        setIsDbReady(true);
       }
-    } catch (e) {
-      console.error("Critical Init Error", e);
-      setHasError(true);
-    }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleLogin = (loggedInUser: User) => {
@@ -77,43 +82,34 @@ function App() {
     setHasError(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await auth.signOut();
     setUser(null);
     localStorage.removeItem('currentUser');
     setActiveTab('dashboard');
-    setHasError(false);
   };
 
   const handleOnboardingComplete = () => {
-    if(user) {
-        // Instead of reloading page (which causes 404s in some envs), we force a state update
-        // ensuring the 'needsOnboarding' check runs again.
-        setAppVersion(v => v + 1);
-        setActiveTab('dashboard');
-    }
+    setAppVersion(v => v + 1);
+    setActiveTab('dashboard');
   };
 
-  const handleResetApp = () => {
-      localStorage.clear();
-      window.location.href = '/'; // Hard reset only on explicit error recovery
-  };
-
-  // Only render app content when DB is ready
-  if (!isDbReady) return null;
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-indigo-950">
+        <Loader2 className="w-12 h-12 text-white animate-spin opacity-20" />
+      </div>
+    );
+  }
 
   if (hasError) {
       return (
           <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
-              <div className="bg-red-50 p-4 rounded-full mb-4">
-                  <AlertTriangle className="w-12 h-12 text-red-500" />
-              </div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">Algo deu errado</h2>
-              <p className="text-slate-500 mb-6 max-w-md">Ocorreu um erro ao carregar seus dados. Tente reiniciar o aplicativo.</p>
-              <button onClick={handleResetApp} className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors">
-                  <RefreshCcw className="w-4 h-4" /> Reiniciar App
-              </button>
+              <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
+              <h2 className="text-2xl font-bold mb-2">Erro de Sincronização</h2>
+              <button onClick={() => window.location.reload()} className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold">Tentar Novamente</button>
           </div>
-      )
+      );
   }
 
   return (
@@ -125,39 +121,26 @@ function App() {
            <Auth onLogin={handleLogin} />
         </div>
       ) : (
-        // Key prop ensures re-render when appVersion changes (after onboarding)
         <React.Fragment key={appVersion}>
            {(() => {
-               try {
-                   // Logic to route between Onboarding and Main App
-                   const profile = db.getProfile(user.id);
-                   const needsOnboarding = user.role === UserRole.STUDENT && (!profile || !profile.onboardingCompleted);
-
-                   if (needsOnboarding) {
-                       return <Onboarding user={user} onComplete={handleOnboardingComplete} />;
-                   }
-
-                   return (
-                     <Layout 
-                       role={user.role} 
-                       activeTab={activeTab} 
-                       onTabChange={setActiveTab}
-                       onLogout={handleLogout}
-                       user={user}
-                       onUserUpdate={(updated) => setUser(updated)}
-                     >
-                       {user.role === UserRole.STUDENT ? (
-                         <StudentViewContent activeTab={activeTab} user={user} onTabChange={setActiveTab} />
-                       ) : (
-                         <TrainerViewContent user={user} activeTab={activeTab} onTabChange={setActiveTab} />
-                       )}
-                     </Layout>
-                   );
-               } catch (err) {
-                   console.error("Render Error:", err);
-                   setHasError(true);
-                   return null;
-               }
+               // No Firebase, precisamos garantir que o perfil seja carregado de forma assíncrona.
+               // Como as views já lidam com useEffect para carregar o perfil, passamos apenas o objeto user.
+               return (
+                 <Layout 
+                   role={user.role} 
+                   activeTab={activeTab} 
+                   onTabChange={setActiveTab}
+                   onLogout={handleLogout}
+                   user={user}
+                   onUserUpdate={(updated) => setUser(updated)}
+                 >
+                   {user.role === UserRole.STUDENT ? (
+                     <StudentViewContent activeTab={activeTab} user={user} onTabChange={setActiveTab} />
+                   ) : (
+                     <TrainerViewContent user={user} activeTab={activeTab} onTabChange={setActiveTab} />
+                   )}
+                 </Layout>
+               );
            })()}
         </React.Fragment>
       )}

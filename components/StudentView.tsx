@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ActivityLog, ChatMessage, Badge, SportType, SpiritualPost, Exercise, CalendarEvent } from '../types';
+import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ActivityLog, ChatMessage, Badge, SportType, SpiritualPost, Exercise, CalendarEvent, SpiritualComment } from '../types';
 import { db } from '../services/storage';
 import { 
     CheckCircle, Trophy, Activity, Dumbbell, Utensils, Calendar as CalendarIcon, 
@@ -29,8 +29,9 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
     const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
     
     useEffect(() => {
-        const load = () => {
-            const p = db.getProfile(user.id);
+        const load = async () => {
+            // FIX: db.getProfile is async
+            const p = await db.getProfile(user.id);
             const allUsers = db.getUsers();
             const foundTrainer = allUsers.find(u => u.role === 'trainer');
             
@@ -484,6 +485,7 @@ const SpiritualView = ({ user, posts, leaderboard }: { user: User, posts: Spirit
 
     const handleSendComment = (postId: string) => {
         if (!commentInput.trim()) return;
+        // FIX: storage service now has addSpiritualComment
         db.addSpiritualComment(postId, {
             userId: user.id,
             content: commentInput,
