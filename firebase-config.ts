@@ -14,15 +14,17 @@ const firebaseConfig = {
   measurementId: "G-FER58V13NM"
 };
 
-// Inicialização segura do Firebase App
-const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Singleton pattern para inicialização do App
+function getFirebaseApp(): FirebaseApp {
+  if (getApps().length > 0) {
+    return getApp();
+  }
+  return initializeApp(firebaseConfig);
+}
 
-/**
- * Em ambientes ESM/CDN, os componentes de serviço (auth, database) 
- * registram-se no core do Firebase via efeitos colaterais.
- * Chamar getAuth(app) e getDatabase(app) aqui garante que a 
- * instância correta seja vinculada e exportada.
- */
+const app = getFirebaseApp();
+
+// Exportação explícita vinculada à instância do app
 export const auth: Auth = getAuth(app);
 export const database: Database = getDatabase(app);
 
