@@ -1,21 +1,25 @@
 
 import { ref, set, get, child, remove } from "firebase/database";
 import { database } from "../firebase-config";
-import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, Badge, SpiritualPost, ReadingStats, SpiritualComment } from '../types';
+import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, BookReview, WishlistBook, LibraryComment, SpiritualPost } from '../types';
 
 class StorageService {
   private dbRef = ref(database);
 
   init() {
-    if (!localStorage.getItem('profiles')) localStorage.setItem('profiles', JSON.stringify([]));
-    if (!localStorage.getItem('users')) localStorage.setItem('users', JSON.stringify([]));
-    if (!localStorage.getItem('workouts')) localStorage.setItem('workouts', JSON.stringify([]));
-    if (!localStorage.getItem('diets')) localStorage.setItem('diets', JSON.stringify([]));
-    if (!localStorage.getItem('progress')) localStorage.setItem('progress', JSON.stringify([]));
-    if (!localStorage.getItem('activity')) localStorage.setItem('activity', JSON.stringify([]));
-    if (!localStorage.getItem('messages')) localStorage.setItem('messages', JSON.stringify([]));
-    if (!localStorage.getItem('events')) localStorage.setItem('events', JSON.stringify([]));
-    if (!localStorage.getItem('spiritual_posts')) localStorage.setItem('spiritual_posts', JSON.stringify([]));
+    const keys = ['profiles', 'users', 'workouts', 'diets', 'progress', 'activity', 'messages', 'events', 'spiritual_posts', 'book_reviews', 'book_wishlist'];
+    keys.forEach(key => {
+        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify([]));
+    });
+  }
+
+  private getLocal<T>(key: string): T[] {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+  }
+
+  private setLocal<T>(key: string, data: T[]) {
+    localStorage.setItem(key, JSON.stringify(data));
   }
 
   async getAllUsersFromDb(): Promise<User[]> {
@@ -23,28 +27,17 @@ class StorageService {
     if (snapshot.exists()) {
       const data = snapshot.val();
       const users = Object.values(data) as User[];
-      localStorage.setItem('users', JSON.stringify(users));
+      this.setLocal('users', users);
       return users;
-    }
-    return [];
-  }
-
-  async getAllProfilesFromDb(): Promise<UserProfile[]> {
-    const snapshot = await get(child(this.dbRef, 'profiles'));
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const profiles = Object.values(data) as UserProfile[];
-      localStorage.setItem('profiles', JSON.stringify(profiles));
-      return profiles;
     }
     return [];
   }
 
   async saveUserToDb(user: User) {
     await set(ref(database, 'users/' + user.id), user);
-    const users = this.get<User>('users').filter(u => u.id !== user.id);
+    const users = this.getLocal<User>('users').filter(u => u.id !== user.id);
     users.push(user);
-    localStorage.setItem('users', JSON.stringify(users));
+    this.setLocal('users', users);
   }
 
   async getUserFromDb(userId: string): Promise<User | null> {
@@ -55,141 +48,130 @@ class StorageService {
   async saveProfile(profile: UserProfile) {
     if (!profile.userId) return;
     await set(ref(database, 'profiles/' + profile.userId), profile);
-    const localProfiles = this.get<UserProfile>('profiles').filter(p => p.userId !== profile.userId);
+    const localProfiles = this.getLocal<UserProfile>('profiles').filter(p => p.userId !== profile.userId);
     localProfiles.push(profile);
-    localStorage.setItem('profiles', JSON.stringify(localProfiles));
+    this.setLocal('profiles', localProfiles);
   }
 
   async getProfile(userId: string): Promise<UserProfile | undefined> {
     const snapshot = await get(child(this.dbRef, `profiles/${userId}`));
     if (snapshot.exists()) {
       const profile = snapshot.val() as UserProfile;
-      const profiles = this.get<UserProfile>('profiles').filter(p => p.userId !== userId);
+      const profiles = this.getLocal<UserProfile>('profiles').filter(p => p.userId !== userId);
       profiles.push(profile);
-      localStorage.setItem('profiles', JSON.stringify(profiles));
+      this.setLocal('profiles', profiles);
       return profile;
     }
-    return this.get<UserProfile>('profiles').find(p => p.userId === userId);
-  }
-
-  private get<T>(key: string): T[] {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-  }
-
-  getUsers(): User[] { 
-    const data = localStorage.getItem('users');
-    return data ? JSON.parse(data) : [];
+    return this.getLocal<UserProfile>('profiles').find(p => p.userId === userId);
   }
 
   updateUser(updatedUser: Partial<User>) {
-    const users = this.get<User>('users');
+    const users = this.getLocal<User>('users');
     const index = users.findIndex(u => u.id === updatedUser.id);
     if (index !== -1) {
       users[index] = { ...users[index], ...updatedUser };
-      localStorage.setItem('users', JSON.stringify(users));
-      if (updatedUser.id) {
-          set(ref(database, 'users/' + updatedUser.id), users[index]);
-      }
+      this.setLocal('users', users);
+      if (updatedUser.id) set(ref(database, 'users/' + updatedUser.id), users[index]);
     }
   }
 
-  deleteUser(userId: string) {
-    const users = this.get<User>('users').filter(u => u.id !== userId);
-    localStorage.setItem('users', JSON.stringify(users));
-    set(ref(database, 'users/' + userId), null);
-    set(ref(database, 'profiles/' + userId), null);
-  }
-
-  getWorkouts(userId: string): WorkoutPlan[] { return this.get<WorkoutPlan>('workouts').filter(w => w.userId === userId); }
+  getWorkouts(userId: string): WorkoutPlan[] { return this.getLocal<WorkoutPlan>('workouts').filter(w => w.userId === userId); }
   saveWorkout(workout: WorkoutPlan) {
-    let workouts = this.get<WorkoutPlan>('workouts');
+    let workouts = this.getLocal<WorkoutPlan>('workouts');
     const index = workouts.findIndex(w => w.id === workout.id);
     if (index >= 0) workouts[index] = workout;
     else workouts.push(workout);
-    localStorage.setItem('workouts', JSON.stringify(workouts));
+    this.setLocal('workouts', workouts);
   }
 
-  getDiet(userId: string): DietPlan | undefined { return this.get<DietPlan>('diets').find(d => d.userId === userId); }
+  getDiet(userId: string): DietPlan | undefined { return this.getLocal<DietPlan>('diets').find(d => d.userId === userId); }
   saveDiet(diet: DietPlan) {
-    const diets = this.get<DietPlan>('diets').filter(d => d.userId !== diet.userId);
+    const diets = this.getLocal<DietPlan>('diets').filter(d => d.userId !== diet.userId);
     diets.push(diet);
-    localStorage.setItem('diets', JSON.stringify(diets));
+    this.setLocal('diets', diets);
   }
 
   getProgress(userId: string): ProgressLog[] { 
-    return this.get<ProgressLog>('progress').filter(p => p.userId === userId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
+    return this.getLocal<ProgressLog>('progress').filter(p => p.userId === userId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
   }
-  addProgress(log: ProgressLog) { localStorage.setItem('progress', JSON.stringify([...this.get<ProgressLog>('progress'), log])); }
-  
-  getActivity(userId: string): ActivityLog[] { return this.get<ActivityLog>('activity').filter(a => a.userId === userId); }
-  logActivity(log: ActivityLog) { localStorage.setItem('activity', JSON.stringify([...this.get<ActivityLog>('activity'), log])); }
+  addProgress(log: ProgressLog) { this.setLocal('progress', [...this.getLocal<ProgressLog>('progress'), log]); }
+
+  // Retrieves the activity history for a specific user
+  getActivity(userId: string): ActivityLog[] {
+    return this.getLocal<ActivityLog>('activity').filter(a => a.userId === userId);
+  }
 
   getMessages(userId1: string, userId2: string): ChatMessage[] {
-    return this.get<ChatMessage>('messages').filter(m => (m.senderId === userId1 && m.receiverId === userId2) || (m.senderId === userId2 && m.receiverId === userId1)).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return this.getLocal<ChatMessage>('messages').filter(m => (m.senderId === userId1 && m.receiverId === userId2) || (m.senderId === userId2 && m.receiverId === userId1)).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   }
-  sendMessage(msg: ChatMessage) { localStorage.setItem('messages', JSON.stringify([...this.get<ChatMessage>('messages'), msg])); }
+  sendMessage(msg: ChatMessage) { this.setLocal('messages', [...this.getLocal<ChatMessage>('messages'), msg]); }
 
   getEvents(trainerId: string): CalendarEvent[] {
-    return this.get<CalendarEvent>('events').filter(e => e.trainerId === trainerId).sort((a,b) => a.date.localeCompare(b.date));
+    return this.getLocal<CalendarEvent>('events').filter(e => e.trainerId === trainerId).sort((a,b) => a.date.localeCompare(b.date));
   }
-
-  addEvent(event: CalendarEvent) {
-    const events = this.get<CalendarEvent>('events').filter(e => e.id !== event.id);
-    events.push(event);
-    localStorage.setItem('events', JSON.stringify(events));
-  }
-
-  deleteEvent(eventId: string) {
-    const events = this.get<CalendarEvent>('events').filter(e => e.id !== eventId);
-    localStorage.setItem('events', JSON.stringify(events));
-  }
+  addEvent(event: CalendarEvent) { this.setLocal('events', [...this.getLocal<CalendarEvent>('events'), event]); }
+  deleteEvent(eventId: string) { this.setLocal('events', this.getLocal<CalendarEvent>('events').filter(e => e.id !== eventId)); }
 
   async rsvpToEvent(eventId: string, userId: string, attending: boolean) {
-    const events = this.get<CalendarEvent>('events');
+    const events = this.getLocal<CalendarEvent>('events');
     const index = events.findIndex(e => e.id === eventId);
     if (index !== -1) {
         let attendees = events[index].attendees || [];
-        if (attending) {
-            if (!attendees.includes(userId)) attendees.push(userId);
-        } else {
-            attendees = attendees.filter(id => id !== userId);
-        }
+        if (attending) { if (!attendees.includes(userId)) attendees.push(userId); }
+        else { attendees = attendees.filter(id => id !== userId); }
         events[index].attendees = attendees;
-        localStorage.setItem('events', JSON.stringify(events));
+        this.setLocal('events', events);
     }
   }
 
   getStudentEvents(userId: string): CalendarEvent[] {
-    return this.get<CalendarEvent>('events').filter(e => e.type === 'global' || e.studentId === userId).sort((a,b) => a.date.localeCompare(b.date));
+    return this.getLocal<CalendarEvent>('events').filter(e => e.type === 'global' || e.studentId === userId).sort((a,b) => a.date.localeCompare(b.date));
+  }
+
+  // SOCIAL LIBRARY METHODS
+  getBookReviews(): BookReview[] {
+    return this.getLocal<BookReview>('book_reviews').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+  
+  saveBookReview(review: BookReview) {
+    const reviews = this.getLocal<BookReview>('book_reviews');
+    this.setLocal('book_reviews', [review, ...reviews]);
+  }
+
+  addReviewComment(reviewId: string, comment: LibraryComment) {
+    const reviews = this.getLocal<BookReview>('book_reviews');
+    const index = reviews.findIndex(r => r.id === reviewId);
+    if (index !== -1) {
+        if (!reviews[index].comments) reviews[index].comments = [];
+        reviews[index].comments.push(comment);
+        this.setLocal('book_reviews', reviews);
+    }
+  }
+
+  getWishlist(userId: string): WishlistBook[] {
+    return this.getLocal<WishlistBook>('book_wishlist').filter(w => w.userId === userId);
+  }
+
+  addToWishlist(wish: WishlistBook) {
+    const wishlist = this.getLocal<WishlistBook>('book_wishlist');
+    // Evitar duplicados
+    if (!wishlist.find(w => w.userId === wish.userId && w.title === wish.title)) {
+        this.setLocal('book_wishlist', [...wishlist, wish]);
+    }
+  }
+
+  removeFromWishlist(wishId: string) {
+    this.setLocal('book_wishlist', this.getLocal<WishlistBook>('book_wishlist').filter(w => w.id !== wishId));
   }
 
   getReadingLeaderboard(): UserProfile[] {
-    return this.get<UserProfile>('profiles').sort((a,b) => (b.readingStats?.daysCompleted || 0) - (a.readingStats?.daysCompleted || 0));
-  }
-
-  getSpiritualPosts(): SpiritualPost[] {
-    return this.get<SpiritualPost>('spiritual_posts').sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }
-  
-  addSpiritualPost(post: SpiritualPost) { localStorage.setItem('spiritual_posts', JSON.stringify([post, ...this.get<SpiritualPost>('spiritual_posts')])); }
-
-  addSpiritualComment(postId: string, comment: SpiritualComment) {
-    const posts = this.get<SpiritualPost>('spiritual_posts');
-    const index = posts.findIndex(p => p.id === postId);
-    if (index !== -1) {
-      if (!posts[index].comments) posts[index].comments = [];
-      posts[index].comments.push(comment);
-      localStorage.setItem('spiritual_posts', JSON.stringify(posts));
-    }
+    return this.getLocal<UserProfile>('profiles').sort((a,b) => (b.readingStats?.daysCompleted || 0) - (a.readingStats?.daysCompleted || 0));
   }
 
   async checkInReading(userId: string) {
     const profile = await this.getProfile(userId);
     if (profile) {
-      if (!profile.readingStats) {
-        profile.readingStats = { daysCompleted: 0, streak: 0, lastReadDate: '' };
-      }
+      if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, streak: 0, lastReadDate: '' };
       const today = new Date().toISOString().split('T')[0];
       if (profile.readingStats.lastReadDate !== today) {
         profile.readingStats.daysCompleted += 1;
@@ -200,13 +182,16 @@ class StorageService {
       }
     }
   }
-  
-  async saveBookSuggestions(userId: string, suggestions: string[]) {
-    const profile = await this.getProfile(userId);
-    if (profile) {
-      profile.bookSuggestions = suggestions;
-      await this.saveProfile(profile);
-    }
+
+  // Retrieves all spiritual reflection posts from the community storage
+  getSpiritualPosts(): SpiritualPost[] {
+    return this.getLocal<SpiritualPost>('spiritual_posts').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+
+  // Adds a new spiritual reflection post to the community feed
+  addSpiritualPost(post: SpiritualPost) {
+    const posts = this.getLocal<SpiritualPost>('spiritual_posts');
+    this.setLocal('spiritual_posts', [post, ...posts]);
   }
 }
 

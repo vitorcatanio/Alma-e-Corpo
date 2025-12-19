@@ -38,6 +38,69 @@ export interface ReadingStats {
     lastReadDate: string;
 }
 
+export interface LibraryComment {
+    id: string;
+    userId: string;
+    userName: string;
+    content: string;
+    timestamp: string;
+}
+
+export interface BookReview {
+    id: string;
+    userId: string;
+    userName: string;
+    userAvatar?: string;
+    title: string;
+    author: string;
+    review: string;
+    rating: number; // 1-5
+    timestamp: string;
+    comments: LibraryComment[];
+}
+
+export interface WishlistBook {
+    id: string;
+    userId: string;
+    title: string;
+    author: string;
+    targetDate: string;
+    addedAt: string;
+}
+
+/**
+ * Interface representing a badge earned by a user.
+ */
+export interface Badge {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+/**
+ * Interface representing a comment on a spiritual post.
+ */
+export interface SpiritualComment {
+    id: string;
+    userId: string;
+    userName: string;
+    content: string;
+    timestamp: string;
+}
+
+/**
+ * Interface representing a spiritual reflection post in the community.
+ */
+export interface SpiritualPost {
+    id: string;
+    userId: string;
+    content: string;
+    timestamp: string;
+    likes: number;
+    comments: SpiritualComment[];
+}
+
 export interface UserProfile {
   userId: string;
   age: number;
@@ -50,14 +113,13 @@ export interface UserProfile {
   onboardingCompleted: boolean;
   waterGoal?: number;
   
-  // Módulos Ativos (Controlados pelo Treinador)
+  // Módulos Ativos
   activeModules: {
     fitness: boolean;
     spiritual: boolean;
     reading: boolean;
   };
 
-  // Metas do Onboarding
   onboardingChoices: {
     wantsWeightLoss: boolean;
     wantsBibleReading: boolean;
@@ -67,15 +129,10 @@ export interface UserProfile {
     extraReadingProgress?: number;
   };
 
-  // Sugestões do Personal
   bookSuggestions?: string[];
-
-  // Gamification
   points: number;
   level: number;
   badges: string[];
-
-  // Spiritual
   readingStats?: ReadingStats;
 }
 
@@ -86,7 +143,7 @@ export interface Exercise {
   sets?: number;
   reps?: string;
   load?: string;
-  studentLoad?: string; // Carga real usada pelo aluno
+  studentLoad?: string;
   distance?: string;
   duration?: string;
   pace?: string;
@@ -159,36 +216,13 @@ export interface ChatMessage {
 export interface CalendarEvent {
     id: string;
     trainerId: string;
-    studentId?: string; // Se vazio, é um evento global/público
+    studentId?: string; 
     title: string;
     description?: string;
-    date: string; // Formato YYYY-MM-DD
+    date: string; 
     time: string;
     type: 'training' | 'assessment' | 'personal' | 'global';
-    attendees?: string[]; // Lista de IDs de usuários que confirmaram
-}
-
-export interface Badge {
-    id: string;
-    name: string;
-    description: string;
-    icon: string;
-    color: string;
-}
-
-export interface SpiritualComment {
-    userId: string;
-    content: string;
-    timestamp: string;
-}
-
-export interface SpiritualPost {
-    id: string;
-    userId: string;
-    content: string;
-    timestamp: string;
-    likes: number;
-    comments: SpiritualComment[];
+    attendees?: string[]; 
 }
 
 export interface AIWorkoutSuggestion {
