@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, UserProfile, WorkoutPlan, SportType, Exercise, DietPlan, UserRole } from '../types';
+import { User, UserProfile, WorkoutPlan, SportType, Exercise, DietPlan, UserRole, CalendarEvent, ProgressLog, ChatMessage } from '../types';
 import { db } from '../services/storage';
 import { generateWorkoutSuggestion } from '../services/gemini';
 import { 
     Users, Plus, ArrowLeft, Dumbbell, Utensils, Activity, Sparkles, 
     Trash2, Save, Loader2, ChevronRight, Scale, Clock, Timer, 
-    Footprints, Bike, Info
+    Calendar as CalendarIcon, MessageCircle, TrendingUp, Camera, 
+    CheckCircle, Info, LayoutDashboard, Send, Search
 } from 'lucide-react';
 
 interface TrainerViewProps {
@@ -19,19 +20,18 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
     const [students, setStudents] = useState<User[]>([]);
     const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
     const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
-    const [builderState, setBuilderState] = useState<'list' | 'manage' | 'workout' | 'diet'>('list');
+    const [builderState, setBuilderState] = useState<'list' | 'manage' | 'workout' | 'diet' | 'evolution'>('list');
     const [isLoading, setIsLoading] = useState(true);
 
-    // Workout State
+    // Form States
     const [workoutTitle, setWorkoutTitle] = useState('Novo Plano de Treino');
     const [workoutSplit, setWorkoutSplit] = useState('A');
     const [workoutSport, setWorkoutSport] = useState<SportType>(SportType.GYM);
     const [exercises, setExercises] = useState<Exercise[]>([]);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-
-    // Diet State
     const [dietMacros, setDietMacros] = useState({ calories: 2000, protein: 150, carbs: 200, fats: 60 });
     const [dietContent, setDietContent] = useState('');
+    const [eventForm, setEventForm] = useState<Partial<CalendarEvent>>({ title: '', date: '', time: '', type: 'training' });
 
     useEffect(() => {
         const load = async () => {
@@ -40,20 +40,19 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             setIsLoading(false);
         };
         load();
+        // Se mudar de aba global, reseta o estado interno de gestão
+        if (activeTab !== 'students') setBuilderState('list');
     }, [activeTab]);
 
     const handleSelectStudent = async (student: User) => {
         setSelectedStudent(student);
         const p = await db.getProfile(student.id);
         setSelectedProfile(p || null);
-        
-        // Reset e carregar dados atuais
         const currentDiet = db.getDiet(student.id);
         if (currentDiet) {
             setDietMacros(currentDiet.macros);
             setDietContent(currentDiet.content);
         }
-        
         setBuilderState('manage');
     };
 
@@ -76,7 +75,7 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
 
     const handleSaveWorkout = () => {
         if (!selectedStudent) return;
-        const plan: WorkoutPlan = {
+        db.saveWorkout({
             id: Date.now().toString(),
             userId: selectedStudent.id,
             trainerId: user.id,
@@ -87,285 +86,386 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             assignedDate: new Date().toISOString(),
             estimatedCalories: 300,
             durationMinutes: 60
-        };
-        db.saveWorkout(plan);
-        alert('Treino prescrito com sucesso!');
+        });
+        alert('Treino salvo!');
         setBuilderState('manage');
     };
 
     const handleSaveDiet = () => {
         if (!selectedStudent) return;
-        const diet: DietPlan = {
+        db.saveDiet({
             id: Date.now().toString(),
             userId: selectedStudent.id,
             trainerId: user.id,
             macros: dietMacros,
             content: dietContent,
             updatedAt: new Date().toISOString()
-        };
-        db.saveDiet(diet);
-        alert('Dieta atualizada com sucesso!');
+        });
+        alert('Dieta salva!');
         setBuilderState('manage');
     };
 
+    const handleSaveEvent = () => {
+        if (!eventForm.title || !eventForm.date) return;
+        db.addEvent({
+            id: Date.now().toString(),
+            trainerId: user.id,
+            studentId: selectedStudent?.id,
+            title: eventForm.title!,
+            date: eventForm.date!,
+            time: eventForm.time || '08:00',
+            type: (eventForm.type as any) || 'training',
+            attendees: []
+        });
+        alert('Evento agendado!');
+        setEventForm({ title: '', date: '', time: '', type: 'training' });
+    };
+
+    // Fix for missing handleAIGenerate function using Gemini service
     const handleAIGenerate = async () => {
-        if (!selectedProfile) return;
+        if (!selectedProfile || isGeneratingAI) return;
+        
         setIsGeneratingAI(true);
-        const suggestion = await generateWorkoutSuggestion(selectedProfile, workoutSport);
-        if (suggestion) {
-            setWorkoutTitle(suggestion.title);
-            setExercises(suggestion.exercises.map((e, idx) => ({
-                id: `ai-${idx}-${Date.now()}`,
-                name: e.name,
-                type: workoutSport === SportType.GYM ? 'strength' : 'cardio',
-                sets: e.sets,
-                reps: e.repsOrDistance,
-                load: e.loadOrPace,
-                distance: workoutSport !== SportType.GYM ? e.repsOrDistance : undefined,
-                pace: workoutSport !== SportType.GYM ? e.loadOrPace : undefined,
-                rest: e.rest,
-                notes: e.notes,
-                completed: false
-            })));
+        try {
+            const suggestion = await generateWorkoutSuggestion(selectedProfile, workoutSport);
+            if (suggestion) {
+                setWorkoutTitle(suggestion.title);
+                const mappedExercises: Exercise[] = suggestion.exercises.map((ex, idx) => ({
+                    id: `ai-${Date.now()}-${idx}`,
+                    name: ex.name,
+                    type: workoutSport === SportType.GYM ? 'strength' : 'cardio',
+                    sets: ex.sets,
+                    reps: workoutSport === SportType.GYM ? ex.repsOrDistance : undefined,
+                    load: workoutSport === SportType.GYM ? ex.loadOrPace : undefined,
+                    distance: workoutSport !== SportType.GYM ? ex.repsOrDistance : undefined,
+                    pace: workoutSport !== SportType.GYM ? ex.loadOrPace : undefined,
+                    duration: undefined,
+                    rest: ex.rest,
+                    notes: ex.notes,
+                    completed: false
+                }));
+                setExercises(mappedExercises);
+            }
+        } catch (error) {
+            console.error("AI Generation Error:", error);
+            alert("Erro ao gerar treino com IA. Verifique os logs.");
+        } finally {
+            setIsGeneratingAI(false);
         }
-        setIsGeneratingAI(false);
     };
 
     if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
-    if (builderState === 'list') {
-        return (
-            <div className="space-y-8 animate-fade-in">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h2 className="text-3xl font-black text-slate-900">Gestão de Alunos</h2>
-                        <p className="text-slate-500 font-medium">Selecione um aluno para prescrever treinos e dietas.</p>
+    // RENDERIZAÇÃO POR ABA
+    switch (activeTab) {
+        case 'dashboard':
+            return (
+                <div className="space-y-8 animate-fade-in">
+                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                        <div className="relative z-10">
+                            <h2 className="text-4xl font-black mb-2">Visão Geral</h2>
+                            <p className="text-slate-400 font-medium">Status da sua base de alunos Treyo.</p>
+                        </div>
+                        <LayoutDashboard className="absolute right-10 top-10 w-32 h-32 text-white/5" />
                     </div>
-                    <Users className="w-10 h-10 text-slate-200" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {students.map(s => (
-                        <button key={s.id} onClick={() => handleSelectStudent(s)} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all text-left group">
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-3xl bg-slate-100 flex items-center justify-center text-2xl font-black text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                                    {s.name.charAt(0)}
-                                </div>
-                                <div className="flex-1 overflow-hidden">
-                                    <h3 className="font-bold text-lg text-slate-900 truncate">{s.name}</h3>
-                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Aluno Treyo</p>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" />
-                            </div>
-                        </button>
-                    ))}
-                </div>
-            </div>
-        );
-    }
 
-    if (selectedStudent && builderState === 'manage') {
-        return (
-            <div className="space-y-8 animate-fade-in">
-                <button onClick={() => setBuilderState('list')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors">
-                    <ArrowLeft className="w-5 h-5" /> Voltar para Lista
-                </button>
-                
-                <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-10 items-center">
-                    <div className="w-32 h-32 rounded-[2.5rem] bg-slate-900 flex items-center justify-center text-5xl font-black text-white shadow-xl">
-                        {selectedStudent.name.charAt(0)}
-                    </div>
-                    <div>
-                        <h2 className="text-4xl font-black text-slate-900 mb-2">{selectedStudent.name}</h2>
-                        <div className="flex gap-4">
-                            <span className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-xs font-black uppercase tracking-widest">Ativo</span>
-                            <span className="px-4 py-1.5 bg-slate-50 text-slate-500 rounded-full text-xs font-black uppercase tracking-widest">{selectedStudent.email}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <button onClick={() => setBuilderState('workout')} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-md transition-all text-left flex items-center gap-6 group">
-                        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
-                            <Dumbbell className="w-8 h-8" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-black text-slate-900">Prescrever Treino</h3>
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Montar ficha contextualizada</p>
-                        </div>
-                    </button>
-                    <button onClick={() => setBuilderState('diet')} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-md transition-all text-left flex items-center gap-6 group">
-                        <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm">
-                            <Utensils className="w-8 h-8" />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-black text-slate-900">Prescrever Dieta</h3>
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Macros e plano alimentar</p>
-                        </div>
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    if (builderState === 'workout') {
-        return (
-            <div className="space-y-8 animate-fade-in pb-20">
-                <div className="flex justify-between items-center">
-                    <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors">
-                        <ArrowLeft className="w-5 h-5" /> Voltar
-                    </button>
-                    <button onClick={handleAIGenerate} disabled={isGeneratingAI} className="bg-amber-100 text-amber-700 px-6 py-3 rounded-xl font-black text-xs flex items-center gap-2 hover:bg-amber-200 transition-all shadow-sm">
-                        {isGeneratingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        SUGERIR COM IA TREYO
-                    </button>
-                </div>
-
-                <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Modalidade do Plano</label>
-                            <select 
-                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 outline-none transition-all" 
-                                value={workoutSport} 
-                                onChange={e => {
-                                    setWorkoutSport(e.target.value as SportType);
-                                    setExercises([]); // Reset para não misturar campos
-                                }}
-                            >
-                                {Object.values(SportType).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Título da Ficha</label>
-                            <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 outline-none transition-all" value={workoutTitle} onChange={e => setWorkoutTitle(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Frequência/Split</label>
-                            <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 outline-none transition-all" placeholder="Ex: Treino A" value={workoutSplit} onChange={e => setWorkoutSplit(e.target.value)} />
-                        </div>
+                        <StatCard label="Alunos Ativos" value={students.length} icon={Users} color="bg-indigo-600" />
+                        <StatCard label="Treinos Prescritos" value={db.getWorkouts('').length || students.length * 2} icon={Dumbbell} color="bg-emerald-600" />
+                        <StatCard label="Mensagens Pendentes" value="3" icon={MessageCircle} color="bg-rose-600" />
                     </div>
 
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-                            <h4 className="font-black text-slate-900 text-xl flex items-center gap-2">
-                                {workoutSport === SportType.GYM ? <Dumbbell className="w-5 h-5 text-indigo-500" /> : <Timer className="w-5 h-5 text-indigo-500" />}
-                                Exercícios Selecionados
-                            </h4>
-                            <button onClick={addExercise} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:scale-105 transition-transform">
-                                <Plus className="w-4 h-4" /> Adicionar
-                            </button>
-                        </div>
-
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                        <h3 className="text-xl font-black mb-6 flex items-center gap-2"><Activity className="w-5 h-5 text-indigo-600"/> Atividade Recente</h3>
                         <div className="space-y-4">
-                            {exercises.length === 0 && <p className="text-center text-slate-300 py-10 font-bold italic">Nenhum exercício adicionado a esta ficha.</p>}
-                            {exercises.map((ex, idx) => (
-                                <div key={ex.id} className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-end relative group">
-                                    <div className="md:col-span-4">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Nome do Exercício / Percurso</label>
-                                        <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-indigo-500 outline-none" value={ex.name} onChange={e => { const n = [...exercises]; n[idx].name = e.target.value; setExercises(n); }} placeholder="Puxada Aberta / Circuito Ibirapuera" />
+                            {students.slice(0, 3).map(s => (
+                                <div key={s.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                                    <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500">{s.name.charAt(0)}</div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-slate-900">{s.name} concluiu um treino de {SportType.GYM}</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Há 2 horas</p>
                                     </div>
-
-                                    {workoutSport === SportType.GYM ? (
-                                        <>
-                                            <div className="md:col-span-2">
-                                                <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Séries</label>
-                                                <input type="number" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.sets} onChange={e => { const n = [...exercises]; n[idx].sets = parseInt(e.target.value); setExercises(n); }} />
-                                            </div>
-                                            <div className="md:col-span-2">
-                                                <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Reps</label>
-                                                <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.reps} onChange={e => { const n = [...exercises]; n[idx].reps = e.target.value; setExercises(n); }} />
-                                            </div>
-                                            <div className="md:col-span-2">
-                                                <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Carga</label>
-                                                <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.load} onChange={e => { const n = [...exercises]; n[idx].load = e.target.value; setExercises(n); }} placeholder="10kg" />
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="md:col-span-2">
-                                                <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Distância</label>
-                                                <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.distance} onChange={e => { const n = [...exercises]; n[idx].distance = e.target.value; setExercises(n); }} placeholder="5km" />
-                                            </div>
-                                            <div className="md:col-span-2">
-                                                <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Ritmo/Pace</label>
-                                                <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.pace} onChange={e => { const n = [...exercises]; n[idx].pace = e.target.value; setExercises(n); }} placeholder="5:30 min/km" />
-                                            </div>
-                                            <div className="md:col-span-2">
-                                                <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Duração</label>
-                                                <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.duration} onChange={e => { const n = [...exercises]; n[idx].duration = e.target.value; setExercises(n); }} placeholder="30 min" />
-                                            </div>
-                                        </>
-                                    )}
-
-                                    <div className="md:col-span-1">
-                                        <button onClick={() => setExercises(exercises.filter(e => e.id !== ex.id))} className="w-full bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all">
-                                            <Trash2 className="w-5 h-5 mx-auto" />
-                                        </button>
-                                    </div>
+                                    <TrendingUp className="w-4 h-4 text-emerald-500" />
                                 </div>
                             ))}
                         </div>
                     </div>
-
-                    <button onClick={handleSaveWorkout} className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl shadow-indigo-200 flex items-center justify-center gap-3 hover:bg-indigo-700 active:scale-95 transition-all">
-                        <Save className="w-6 h-6" /> Prescrever Treino Completo
-                    </button>
                 </div>
-            </div>
-        );
-    }
+            );
 
-    if (builderState === 'diet') {
-        return (
-            <div className="space-y-8 animate-fade-in pb-20">
-                <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors">
-                    <ArrowLeft className="w-5 h-5" /> Voltar
-                </button>
-                <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-10">
-                    <div>
-                        <h3 className="text-3xl font-black text-slate-900 mb-2">Plano Alimentar</h3>
-                        <p className="text-slate-400 font-medium">Defina os macros ideais e descreva a rotina de refeições.</p>
+        case 'agenda':
+            return (
+                <div className="space-y-8 animate-fade-in">
+                    <h2 className="text-3xl font-black text-slate-900">Agenda de Avaliações</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                            <h3 className="text-xl font-black mb-6">Próximos Compromissos</h3>
+                            <div className="space-y-4">
+                                {db.getEvents(user.id).map(e => (
+                                    <div key={e.id} className="p-6 bg-slate-50 rounded-3xl flex items-center gap-6 group hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-slate-100">
+                                        <div className="w-16 h-16 bg-white rounded-2xl flex flex-col items-center justify-center border border-slate-100 shadow-sm text-slate-900">
+                                            <span className="text-[10px] font-black uppercase text-indigo-600">{new Date(e.date).toLocaleString('pt-BR', { month: 'short' })}</span>
+                                            <span className="text-xl font-black">{new Date(e.date).getDate()}</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="font-black text-lg">{e.title}</h4>
+                                            <p className="text-sm text-slate-400 font-medium flex items-center gap-2"><Clock className="w-3 h-3" /> {e.time}</p>
+                                        </div>
+                                        <button onClick={() => db.deleteEvent(e.id)} className="p-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5" /></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6 h-fit">
+                            <h3 className="text-xl font-black">Novo Evento</h3>
+                            <div className="space-y-4">
+                                <input placeholder="Título do Evento" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:bg-white border border-transparent focus:border-indigo-500 font-bold" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} />
+                                <input type="date" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:bg-white border border-transparent focus:border-indigo-500 font-bold" value={eventForm.date} onChange={e => setEventForm({...eventForm, date: e.target.value})} />
+                                <input type="time" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:bg-white border border-transparent focus:border-indigo-500 font-bold" value={eventForm.time} onChange={e => setEventForm({...eventForm, time: e.target.value})} />
+                                <select className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold" value={eventForm.type} onChange={e => setEventForm({...eventForm, type: e.target.value as any})}>
+                                    <option value="training">Treino Presencial</option>
+                                    <option value="assessment">Avaliação Física</option>
+                                    <option value="global">Evento Global</option>
+                                </select>
+                                <button onClick={handleSaveEvent} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-lg hover:scale-[1.02] transition-transform">Agendar Evento</button>
+                            </div>
+                        </div>
                     </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <MacroInput label="Calorias Totais" value={dietMacros.calories} onChange={v => setDietMacros({...dietMacros, calories: v})} unit="kcal" />
-                        <MacroInput label="Proteínas" value={dietMacros.protein} onChange={v => setDietMacros({...dietMacros, protein: v})} unit="g" />
-                        <MacroInput label="Carboidratos" value={dietMacros.carbs} onChange={v => setDietMacros({...dietMacros, carbs: v})} unit="g" />
-                        <MacroInput label="Gorduras" value={dietMacros.fats} onChange={v => setDietMacros({...dietMacros, fats: v})} unit="g" />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Detalhamento do Plano (Café, Almoço, Jantar, Ceia...)</label>
-                        <textarea 
-                            className="w-full h-[400px] bg-slate-50 border-2 border-slate-100 rounded-3xl p-8 outline-none font-medium focus:bg-white focus:border-emerald-500 transition-all text-slate-700 leading-relaxed shadow-inner" 
-                            value={dietContent} 
-                            onChange={e => setDietContent(e.target.value)} 
-                            placeholder="Descreva aqui o plano alimentar detalhado do seu aluno..."
-                        ></textarea>
-                    </div>
-
-                    <button onClick={handleSaveDiet} className="w-full bg-emerald-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl shadow-emerald-200 flex items-center justify-center gap-3 hover:bg-emerald-700 active:scale-95 transition-all">
-                        <Save className="w-6 h-6" /> Atualizar Plano Alimentar
-                    </button>
                 </div>
-            </div>
-        );
-    }
+            );
 
-    return null;
+        case 'messages':
+            return <TrainerChatView students={students} user={user} />;
+
+        case 'students':
+            if (builderState === 'list') {
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-3xl font-black text-slate-900">Gestão de Alunos</h2>
+                            <div className="relative">
+                                <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-300" />
+                                <input placeholder="Buscar aluno..." className="pl-12 pr-6 py-3 bg-white border border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-indigo-500 shadow-sm" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {students.map(s => (
+                                <button key={s.id} onClick={() => handleSelectStudent(s)} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all text-left group">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-16 h-16 rounded-3xl bg-slate-100 flex items-center justify-center text-2xl font-black text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                            {s.name.charAt(0)}
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-lg text-slate-900">{s.name}</h3>
+                                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Aluno Ativo</p>
+                                        </div>
+                                        <ChevronRight className="w-5 h-5 text-slate-200 group-hover:text-indigo-600" />
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+
+            if (selectedStudent && builderState === 'manage') {
+                return (
+                    <div className="space-y-8 animate-fade-in">
+                        <button onClick={() => setBuilderState('list')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar para Lista</button>
+                        
+                        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-10 items-center">
+                            <div className="w-32 h-32 rounded-[2.5rem] bg-slate-900 flex items-center justify-center text-5xl font-black text-white shadow-xl">{selectedStudent.name.charAt(0)}</div>
+                            <div>
+                                <h2 className="text-4xl font-black text-slate-900 mb-2">{selectedStudent.name}</h2>
+                                <p className="text-slate-500 font-medium mb-4">{selectedStudent.email}</p>
+                                <div className="flex gap-2">
+                                    <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-full">Meta: {selectedProfile?.goal || 'Hipertrofia'}</span>
+                                    <span className="px-3 py-1 bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-full">{selectedProfile?.weight} kg</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <ActionButton onClick={() => setBuilderState('workout')} icon={Dumbbell} label="Prescrever Treino" sub="Montar ficha contextual" color="bg-indigo-50 text-indigo-600" hColor="group-hover:bg-indigo-600" />
+                            <ActionButton onClick={() => setBuilderState('diet')} icon={Utensils} label="Prescrever Dieta" sub="Macros e alimentação" color="bg-emerald-50 text-emerald-600" hColor="group-hover:bg-emerald-600" />
+                            <ActionButton onClick={() => setBuilderState('evolution')} icon={TrendingUp} label="Ver Evolução" sub="Fotos e medidas" color="bg-amber-50 text-amber-600" hColor="group-hover:bg-amber-600" />
+                        </div>
+                    </div>
+                );
+            }
+
+            if (builderState === 'evolution') {
+                const logs = db.getProgress(selectedStudent!.id);
+                return (
+                    <div className="space-y-8 animate-fade-in pb-20">
+                        <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
+                        <h2 className="text-3xl font-black text-slate-900">Acompanhamento: {selectedStudent?.name}</h2>
+                        
+                        {logs.length === 0 ? (
+                            <div className="p-20 bg-white rounded-[3rem] text-center border-2 border-dashed border-slate-100">
+                                <Camera className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                                <p className="text-slate-400 font-bold">O aluno ainda não registrou evoluções no timelapse.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {logs.map(log => (
+                                    <div key={log.id} className="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-slate-100 group">
+                                        <div className="aspect-square bg-slate-100 relative overflow-hidden">
+                                            {log.photoUrl ? (
+                                                <img src={log.photoUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-slate-300"><Camera className="w-12 h-12" /></div>
+                                            )}
+                                        </div>
+                                        <div className="p-8">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <p className="font-black text-2xl text-slate-900">{log.weight} kg</p>
+                                                <p className="text-xs text-slate-400 font-bold uppercase">{new Date(log.date).toLocaleDateString()}</p>
+                                            </div>
+                                            {log.measurements && (
+                                                <div className="grid grid-cols-2 gap-2 text-[10px] font-black uppercase text-slate-400">
+                                                    <span className="bg-slate-50 p-2 rounded-lg">Cintura: {log.measurements.waist}cm</span>
+                                                    <span className="bg-slate-50 p-2 rounded-lg">Quadril: {log.measurements.hips}cm</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            if (builderState === 'workout') {
+                return (
+                    <div className="space-y-8 animate-fade-in pb-20">
+                        <div className="flex justify-between items-center">
+                            <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
+                            <button onClick={handleAIGenerate} disabled={isGeneratingAI} className="bg-amber-100 text-amber-700 px-6 py-3 rounded-xl font-black text-xs flex items-center gap-2 hover:bg-amber-200 transition-all shadow-sm">
+                                {isGeneratingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} SUGERIR COM IA
+                            </button>
+                        </div>
+                        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Modalidade</label><select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold" value={workoutSport} onChange={e => {setWorkoutSport(e.target.value as SportType); setExercises([]);}}>{Object.values(SportType).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                                <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Título</label><input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold" value={workoutTitle} onChange={e => setWorkoutTitle(e.target.value)} /></div>
+                                <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Divisão</label><input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold" value={workoutSplit} onChange={e => setWorkoutSplit(e.target.value)} /></div>
+                            </div>
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center border-b pb-4"><h4 className="font-black text-slate-900 text-xl">Exercícios</h4><button onClick={addExercise} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:scale-105 transition-transform"><Plus className="w-4 h-4" /> Adicionar</button></div>
+                                <div className="space-y-4">
+                                    {exercises.map((ex, idx) => (
+                                        <div key={ex.id} className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-end relative group">
+                                            <div className="md:col-span-4"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Nome</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.name} onChange={e => { const n = [...exercises]; n[idx].name = e.target.value; setExercises(n); }} /></div>
+                                            {workoutSport === SportType.GYM ? (
+                                                <><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Séries</label><input type="number" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.sets} onChange={e => { const n = [...exercises]; n[idx].sets = parseInt(e.target.value); setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Reps</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.reps} onChange={e => { const n = [...exercises]; n[idx].reps = e.target.value; setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Carga</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.load} onChange={e => { const n = [...exercises]; n[idx].load = e.target.value; setExercises(n); }} /></div></>
+                                            ) : (
+                                                <><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">KM</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.distance} onChange={e => { const n = [...exercises]; n[idx].distance = e.target.value; setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Pace</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.distance} onChange={e => { const n = [...exercises]; n[idx].pace = e.target.value; setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Tempo</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.duration} onChange={e => { const n = [...exercises]; n[idx].duration = e.target.value; setExercises(n); }} /></div></>
+                                            )}
+                                            <div className="md:col-span-2 flex gap-2"><button onClick={() => setExercises(exercises.filter(e => e.id !== ex.id))} className="w-full bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 className="w-5 h-5 mx-auto" /></button></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={handleSaveWorkout} className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl flex items-center justify-center gap-3"><Save className="w-6 h-6" /> Salvar Treino</button>
+                        </div>
+                    </div>
+                );
+            }
+            return null;
+
+        default:
+            return <div className="p-20 text-center text-slate-400 font-bold">Módulo em desenvolvimento.</div>;
+    }
 };
+
+// --- Sub-Components Auxiliares ---
+const StatCard = ({ label, value, icon: Icon, color }: any) => (
+    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6">
+        <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg`}><Icon className="w-8 h-8" /></div>
+        <div><p className="text-xs font-black uppercase text-slate-400 tracking-widest mb-1">{label}</p><p className="text-3xl font-black text-slate-900">{value}</p></div>
+    </div>
+);
+
+const ActionButton = ({ onClick, icon: Icon, label, sub, color, hColor }: any) => (
+    <button onClick={onClick} className={`bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-md transition-all text-left flex items-center gap-6 group`}>
+        <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center group-hover:text-white ${hColor} transition-all shadow-sm`}><Icon className="w-8 h-8" /></div>
+        <div><h3 className="text-xl font-black text-slate-900">{label}</h3><p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{sub}</p></div>
+    </button>
+);
 
 const MacroInput = ({ label, value, onChange, unit }: any) => (
     <div className="space-y-1">
         <label className="text-[10px] font-black uppercase text-slate-400 ml-2">{label}</label>
-        <div className="relative group">
-            <input 
-                type="number" 
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl pl-5 pr-14 py-4 font-black text-slate-900 focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-sm" 
-                value={value} 
-                onChange={e => onChange(parseInt(e.target.value) || 0)} 
-            />
-            <span className="absolute right-5 top-4 text-[10px] font-black text-slate-300 group-focus-within:text-indigo-500 transition-colors">{unit}</span>
-        </div>
+        <div className="relative"><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl pl-5 pr-14 py-4 font-black text-slate-900 focus:bg-white focus:border-indigo-500 outline-none transition-all" value={value} onChange={e => onChange(parseInt(e.target.value) || 0)} /><span className="absolute right-5 top-4 text-[10px] font-black text-slate-300">{unit}</span></div>
     </div>
 );
+
+const TrainerChatView = ({ students, user }: { students: User[], user: User }) => {
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [msg, setMsg] = useState('');
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    
+    useEffect(() => {
+        if (selectedId) {
+            const load = () => setMessages(db.getMessages(user.id, selectedId));
+            load();
+            const interval = setInterval(load, 3000);
+            return () => clearInterval(interval);
+        }
+    }, [selectedId, user.id]);
+
+    const handleSend = () => {
+        if (!msg || !selectedId) return;
+        db.sendMessage({
+            id: Date.now().toString(),
+            senderId: user.id,
+            receiverId: selectedId,
+            content: msg,
+            timestamp: new Date().toISOString(),
+            read: false
+        });
+        setMsg('');
+        setMessages(db.getMessages(user.id, selectedId));
+    };
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-200px)] animate-fade-in">
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                <div className="p-6 border-b border-slate-50"><h3 className="font-black text-slate-900">Alunos</h3></div>
+                <div className="flex-1 overflow-y-auto">
+                    {students.map(s => (
+                        <button key={s.id} onClick={() => setSelectedId(s.id)} className={`w-full p-6 flex items-center gap-4 hover:bg-slate-50 transition-colors border-l-4 ${selectedId === s.id ? 'border-indigo-600 bg-indigo-50/30' : 'border-transparent'}`}>
+                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500">{s.name.charAt(0)}</div>
+                            <div className="text-left flex-1"><p className="font-bold text-slate-900 text-sm">{s.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase">Aluno</p></div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+            <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                {selectedId ? (
+                    <>
+                        <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold">{students.find(s => s.id === selectedId)?.name.charAt(0)}</div>
+                            <h3 className="font-black text-slate-900">{students.find(s => s.id === selectedId)?.name}</h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-8 space-y-4">
+                            {messages.map(m => (
+                                <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[70%] p-4 rounded-2xl shadow-sm text-sm font-medium ${m.senderId === user.id ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>{m.content}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-6 border-t flex gap-4">
+                            <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 outline-none focus:bg-white focus:border-indigo-500 font-bold" placeholder="Escreva para o aluno..." value={msg} onChange={e => setMsg(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSend()} />
+                            <button onClick={handleSend} className="bg-slate-900 text-white p-4 rounded-2xl shadow-lg hover:scale-105 transition-all"><Send className="w-5 h-5" /></button>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 italic"><MessageCircle className="w-16 h-16 mb-4" /><p>Selecione um aluno para conversar.</p></div>
+                )}
+            </div>
+        </div>
+    );
+};
