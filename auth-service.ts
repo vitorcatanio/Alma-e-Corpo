@@ -1,14 +1,5 @@
 
-import { 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    setPersistence, 
-    browserLocalPersistence, 
-    browserSessionPersistence,
-    signOut,
-    UserCredential, 
-    User as FirebaseUser 
-} from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, UserCredential, User as FirebaseUser } from "firebase/auth";
 import { ref, set } from "firebase/database";
 import { auth, database } from "./firebase-config";
 import { UserRole } from "./types";
@@ -18,12 +9,6 @@ import { UserRole } from "./types";
  */
 export const cadastrarUsuario = async (email: string, password: string, nome: string, role: UserRole): Promise<UserCredential> => {
     try {
-        // Garante que não haja sessão ativa antes de criar novo usuário
-        await signOut(auth);
-        
-        // Por padrão, novos cadastros usam persistência local para conveniência
-        await setPersistence(auth, browserLocalPersistence);
-        
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
@@ -43,18 +28,8 @@ export const cadastrarUsuario = async (email: string, password: string, nome: st
     }
 };
 
-/**
- * Realiza o login permitindo escolher entre persistência local (lembrar) ou sessão (temporário).
- */
-export const fazerLogin = async (email: string, password: string, lembrarMe: boolean): Promise<FirebaseUser | undefined> => {
+export const fazerLogin = async (email: string, password: string): Promise<FirebaseUser | undefined> => {
     try {
-        // CRITICAL: Limpa qualquer sessão anterior para evitar conflitos de cache
-        await signOut(auth);
-        
-        // Define o tipo de persistência antes de realizar o login
-        const persistenceType = lembrarMe ? browserLocalPersistence : browserSessionPersistence;
-        await setPersistence(auth, persistenceType);
-        
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         return userCredential.user;
     } catch (error: any) {

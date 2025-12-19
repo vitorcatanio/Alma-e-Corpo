@@ -1,8 +1,9 @@
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getDatabase } from "firebase/database";
+import { getAnalytics } from "firebase/analytics";
 
-import { initializeApp, getApp, getApps, FirebaseApp } from "firebase/app";
-import { getAuth, Auth } from "firebase/auth";
-import { getDatabase, Database } from "firebase/database";
-
+// Configuração do Firebase extraída do console
 const firebaseConfig = {
   apiKey: "AIzaSyBIAC3CvX_SoHnXZJZv3S0kqeN3ofRHg7U",
   authDomain: "treyo-77c7a.firebaseapp.com",
@@ -14,15 +15,14 @@ const firebaseConfig = {
   measurementId: "G-FER58V13NM"
 };
 
-// Inicialização Singleton garantida
-let app: FirebaseApp;
-if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
+// Inicializa o Firebase
+const app = initializeApp(firebaseConfig);
 
-export const auth: Auth = getAuth(app);
-export const database: Database = getDatabase(app);
+// Inicializa Analytics (opcional em ambientes de desenvolvimento)
+const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+
+// Exporta as referências dos serviços conforme solicitado
+export const auth = getAuth(app);
+export const database = getDatabase(app);
 
 export default app;
