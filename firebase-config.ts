@@ -14,10 +14,14 @@ const firebaseConfig = {
   measurementId: "G-FER58V13NM"
 };
 
-// Inicialização segura
-const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// Inicialização Singleton garantida
+let app: FirebaseApp;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApp();
+}
 
-// Exportação de serviços garantindo vinculação correta ao app inicializado
 export const auth: Auth = getAuth(app);
 export const database: Database = getDatabase(app);
 
