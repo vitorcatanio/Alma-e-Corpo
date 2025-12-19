@@ -15,7 +15,7 @@ interface AuthProps {
 }
 
 export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => {
-    // Estado inicial sempre como Aluno
+    // O sistema sempre abre no modo ALUNO por padrão
     const [isLogin, setIsLogin] = useState(true);
     const [isTrainerMode, setIsTrainerMode] = useState(false);
     
@@ -30,7 +30,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
 
     const REQUIRED_ACCESS_CODE = "amizades verdadeiras";
 
-    // Limpa estados ao trocar entre Aluno/Personal ou Login/Cadastro
+    // Reseta o formulário ao trocar de modo
     useEffect(() => {
         setEmail('');
         setPassword('');
@@ -48,7 +48,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
 
         try {
             if (isTrainerMode && accessCode.toLowerCase() !== REQUIRED_ACCESS_CODE.toLowerCase()) {
-                throw new Error('Código administrativo inválido.');
+                throw new Error('Código administrativo incorreto.');
             }
 
             if (isLogin) {
@@ -59,18 +59,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
                     if (userData) {
                         if (userData.role !== roleToUse) {
                             await auth.signOut();
-                            throw new Error(`Acesso negado: Esta conta está registrada como ${userData.role === 'trainer' ? 'Personal' : 'Aluno'}.`);
+                            throw new Error(`Acesso Negado: Perfil incorreto para este modo de entrada.`);
                         }
                         onLogin(userData);
                     } else {
-                        // Caso o usuário exista no Auth mas não no RTDB (raro)
                         const newUser: User = { id: firebaseUser.uid, name: firebaseUser.displayName || 'Usuário', email: firebaseUser.email!, role: roleToUse };
                         await db.saveUserToDb(newUser);
                         onLogin(newUser);
                     }
                 }
             } else {
-                if (!name || !email || !password) throw new Error('Todos os campos são obrigatórios.');
+                if (!name || !email || !password) throw new Error('Preencha todos os campos obrigatórios.');
                 const userCredential = await cadastrarUsuario(email, password, name, roleToUse);
                 const newUser: User = { id: userCredential.user.uid, name, email, role: roleToUse };
                 onLogin(newUser);
@@ -78,8 +77,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
         } catch (err: any) {
             setAuthProcessStatus(false);
             let msg = err.message;
-            if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') msg = "E-mail ou senha inválidos.";
-            if (err.code === 'auth/user-not-found') msg = "Usuário não encontrado.";
+            if (err.code === 'auth/invalid-credential') msg = "E-mail ou senha incorretos.";
             setError(msg);
         } finally {
             setIsLoading(false);
@@ -87,39 +85,39 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
     };
 
     return (
-        <div className={`min-h-screen flex items-center justify-center p-6 transition-all duration-700 bg-slate-50`}>
+        <div className={`min-h-screen flex items-center justify-center p-6 bg-slate-50 transition-colors duration-700 ${isTrainerMode ? 'bg-indigo-950/5' : ''}`}>
             
-            <div className="w-full max-w-[1000px] grid grid-cols-1 md:grid-cols-2 bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative">
+            <div className="w-full max-w-[980px] grid grid-cols-1 md:grid-cols-2 bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative">
                 
-                {/* Banner Lateral */}
+                {/* Painel de Identidade (Esquerda) */}
                 <div className={`relative hidden md:flex flex-col justify-between p-12 transition-all duration-700 ${isTrainerMode ? 'bg-slate-900' : 'bg-indigo-600'}`}>
                     <div className="text-white">
                         <div className="flex items-center gap-3 mb-8">
                             <Activity className="w-6 h-6" />
-                            <span className="font-bold tracking-widest text-[10px] uppercase opacity-60">TREYO ECOSYSTEM</span>
+                            <span className="font-bold tracking-widest text-[10px] uppercase opacity-60">TREYO PLATFORM</span>
                         </div>
                         <h1 className="text-6xl font-black tracking-tighter mb-4">TREYO</h1>
                         <p className="opacity-80 text-lg max-w-xs font-medium leading-relaxed">
                             {isTrainerMode 
-                                ? 'Portal Administrativo para Gestão de Alunos e Planos.' 
-                                : 'Conectando seu desenvolvimento físico ao propósito espiritual.'}
+                                ? 'Gerenciamento profissional para o seu ecossistema de alunos.' 
+                                : 'Conectando seu desenvolvimento físico à sua jornada espiritual.'}
                         </p>
                     </div>
                 </div>
 
-                {/* Área do Formulário */}
-                <div className="p-10 md:p-14 flex flex-col justify-center bg-white relative">
+                {/* Painel de Acesso (Direita) */}
+                <div className="p-10 md:p-14 flex flex-col justify-center bg-white">
                     <div className="mb-10">
                         <h2 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">
-                            {isTrainerMode ? 'Admin Portal' : isLogin ? 'Olá Aluno' : 'Criar Perfil'}
+                            {isTrainerMode ? 'Admin Portal' : isLogin ? 'Olá Aluno' : 'Criar Conta'}
                         </h2>
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                            {isTrainerMode ? 'Painel de Controle Treyo' : 'Acesse seu painel de evolução'}
+                            {isTrainerMode ? 'Acesso Administrativo Treyo' : 'Seu painel de evolução pessoal'}
                         </p>
                     </div>
 
                     <form 
-                        key={isTrainerMode ? 'trainer-form' : 'student-form'} 
+                        key={isTrainerMode ? 'auth-personal' : 'auth-aluno'}
                         onSubmit={handleSubmit} 
                         className="space-y-5"
                         autoComplete="off"
@@ -141,8 +139,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
                                 <input 
                                     required 
                                     type="email" 
-                                    name={isTrainerMode ? "trainer_email" : "student_email"}
-                                    placeholder="exemplo@email.com"
+                                    name={isTrainerMode ? "trainer_login" : "student_login"}
+                                    placeholder="seuemail@exemplo.com"
                                     className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-50 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700" 
                                     value={email} 
                                     onChange={e => setEmail(e.target.value)} 
@@ -157,7 +155,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
                                 <input 
                                     required 
                                     type="password" 
-                                    name={isTrainerMode ? "trainer_password" : "student_password"}
+                                    name={isTrainerMode ? "trainer_pwd" : "student_pwd"}
                                     autoComplete="current-password"
                                     placeholder="••••••••"
                                     className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-slate-50 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700" 
@@ -176,14 +174,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
                                 >
                                     {lembrarMe && <Check className="w-4 h-4" />}
                                 </button>
-                                <span className="text-xs font-bold text-slate-400">Lembrar neste aparelho</span>
+                                <span className="text-xs font-bold text-slate-400">Manter conectado</span>
                             </div>
                         )}
 
                         {isTrainerMode && (
                             <div className="space-y-1 animate-slide-up">
-                                <label className="text-[10px] font-black uppercase text-indigo-500 ml-1">Código Administrativo</label>
-                                <input required type="password" placeholder="Chave de Acesso" className="w-full px-6 py-4 rounded-2xl border-2 border-indigo-100 bg-indigo-50 focus:bg-white focus:border-indigo-500 outline-none font-black tracking-widest text-indigo-900" value={accessCode} onChange={e => setAccessCode(e.target.value)} />
+                                <label className="text-[10px] font-black uppercase text-indigo-500 ml-1">Chave de Segurança</label>
+                                <input required type="password" placeholder="Código Admin" className="w-full px-6 py-4 rounded-2xl border-2 border-indigo-100 bg-indigo-50 focus:bg-white focus:border-indigo-500 outline-none font-black tracking-widest text-indigo-900" value={accessCode} onChange={e => setAccessCode(e.target.value)} />
                             </div>
                         )}
 
@@ -194,7 +192,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
                         )}
 
                         <button disabled={isLoading} type="submit" className={`w-full py-5 rounded-2xl text-white font-black text-lg flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-xl ${isTrainerMode ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
-                            {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Entrar no Sistema'}
+                            {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : isLogin ? 'Entrar no Sistema' : 'Finalizar Cadastro'}
                             {!isLoading && <ArrowRight className="w-5 h-5" />}
                         </button>
                     </form>
@@ -207,17 +205,19 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, setAuthProcessStatus }) => 
                 </div>
             </div>
 
-            {/* Ícone Discreto de Admin (Canto Inferior Direito) */}
-            <button 
-                onClick={() => setIsTrainerMode(!isTrainerMode)}
-                className="fixed bottom-6 right-6 p-4 text-slate-300 hover:text-indigo-500 transition-all opacity-20 hover:opacity-100 group flex items-center gap-2"
-                title="Acesso Administrativo"
-            >
-                <span className="text-[8px] font-black uppercase tracking-[0.3em] opacity-0 group-hover:opacity-100 transition-opacity">
-                    {isTrainerMode ? 'VOLTAR PARA ALUNO' : 'PAINEL MASTER'}
-                </span>
-                <Shield className="w-4 h-4" />
-            </button>
+            {/* Alternador de Modo Master - Ultra Discreto no Canto Inferior */}
+            <div className="fixed bottom-6 right-6">
+                <button 
+                    onClick={() => setIsTrainerMode(!isTrainerMode)}
+                    className="p-3 text-slate-200 hover:text-indigo-400 transition-all opacity-20 hover:opacity-100 group flex items-center gap-2"
+                    title={isTrainerMode ? "Voltar ao Modo Aluno" : "Acesso Personal"}
+                >
+                    <span className="text-[8px] font-black uppercase tracking-[0.3em] opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isTrainerMode ? 'PORTAL ALUNO' : 'PORTAL ADMIN'}
+                    </span>
+                    <Shield className="w-4 h-4" />
+                </button>
+            </div>
         </div>
     );
 };

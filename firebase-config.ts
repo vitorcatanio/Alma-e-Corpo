@@ -14,17 +14,10 @@ const firebaseConfig = {
   measurementId: "G-FER58V13NM"
 };
 
-// Singleton pattern para inicialização do App
-function getFirebaseApp(): FirebaseApp {
-  if (getApps().length > 0) {
-    return getApp();
-  }
-  return initializeApp(firebaseConfig);
-}
+// Inicialização segura
+const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-const app = getFirebaseApp();
-
-// Exportação explícita vinculada à instância do app
+// Exportação de serviços garantindo vinculação correta ao app inicializado
 export const auth: Auth = getAuth(app);
 export const database: Database = getDatabase(app);
 
