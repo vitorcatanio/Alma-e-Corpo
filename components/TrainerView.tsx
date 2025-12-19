@@ -213,7 +213,8 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             id: Date.now().toString(),
             senderId: user.id,
             receiverId: activeChat.id,
-            content: input,
+            // Changed 'input' to 'msgInput' to fix "Cannot find name 'input'"
+            content: msgInput,
             timestamp: new Date().toISOString(),
             read: false
         });
