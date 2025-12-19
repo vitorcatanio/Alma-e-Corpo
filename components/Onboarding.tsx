@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { User, SportType, UserProfile } from '../types';
 import { db } from '../services/storage';
-import { AlertCircle, CheckCircle, Scale, BookOpen, Target, ChevronRight } from 'lucide-react';
+import { AlertCircle, CheckCircle, Scale, BookOpen, Target, ChevronRight, Loader2 } from 'lucide-react';
 
 interface OnboardingProps {
     user: User;
@@ -12,6 +12,7 @@ interface OnboardingProps {
 export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
     const [step, setStep] = useState(1);
     const [error, setError] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const [formData, setFormData] = useState<Partial<UserProfile>>({
         userId: user.id,
         selectedSports: [],
@@ -48,18 +49,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                 return;
             }
         }
-        if (step === 3) {
-            // Se quer peso, precisa de medidas
-            if (formData.onboardingChoices?.wantsWeightLoss) {
-                if (!formData.measurements?.waist || !formData.measurements?.hips) {
-                    setError('Informe suas medidas.');
-                    return;
-                }
-            }
-        }
         
-        // Lógica de pulo de passos
-        if (step === 3 && !formData.onboardingChoices?.wantsWeightLoss) {
+        if (step === 3 && !formData.onboardingChoices?.wantsWeightLoss && !formData.onboardingChoices?.wantsBibleReading && !formData.onboardingChoices?.wantsExtraReading) {
             handleSubmit();
             return;
         }
@@ -68,30 +59,37 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
         setStep(s => s + 1);
     };
 
-    const handleSubmit = () => {
-        const profile: UserProfile = {
-            userId: user.id,
-            age: formData.age || 0,
-            gender: formData.gender || 'outro',
-            height: formData.height || 0,
-            weight: formData.weight || 0,
-            measurements: formData.measurements as any,
-            goal: formData.goal || 'Foco TREYO',
-            selectedSports: formData.selectedSports || [],
-            onboardingCompleted: true,
-            activeModules: {
-                fitness: false, // Começa inativo até o personal ativar
-                spiritual: false,
-                reading: false
-            },
-            onboardingChoices: formData.onboardingChoices as any,
-            points: 0,
-            level: 1,
-            badges: []
-        };
-        
-        db.saveProfile(profile);
-        onComplete();
+    const handleSubmit = async () => {
+        setIsSaving(true);
+        try {
+            const profile: UserProfile = {
+                userId: user.id,
+                age: formData.age || 0,
+                gender: formData.gender || 'outro',
+                height: formData.height || 0,
+                weight: formData.weight || 0,
+                measurements: (formData.measurements as any) || { waist: 0, hips: 0, arm: 0, leg: 0 },
+                goal: formData.goal || 'Foco TREYO',
+                selectedSports: formData.selectedSports || [],
+                onboardingCompleted: true,
+                activeModules: {
+                    fitness: false, 
+                    spiritual: false,
+                    reading: false
+                },
+                onboardingChoices: formData.onboardingChoices as any,
+                points: 0,
+                level: 1,
+                badges: []
+            };
+            
+            await db.saveProfile(profile);
+            onComplete();
+        } catch (e) {
+            setError('Erro ao salvar perfil. Tente novamente.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -137,24 +135,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
 
                 {step === 2 && (
                     <div className="space-y-4">
-                        <ChoiceCard 
-                            icon={Scale} 
-                            title="Perder peso" 
-                            active={formData.onboardingChoices?.wantsWeightLoss} 
-                            onClick={() => handleObjectiveToggle('wantsWeightLoss')} 
-                        />
-                        <ChoiceCard 
-                            icon={BookOpen} 
-                            title="Leitura bíblica" 
-                            active={formData.onboardingChoices?.wantsBibleReading} 
-                            onClick={() => handleObjectiveToggle('wantsBibleReading')} 
-                        />
-                        <ChoiceCard 
-                            icon={Target} 
-                            title="Leitura extra" 
-                            active={formData.onboardingChoices?.wantsExtraReading} 
-                            onClick={() => handleObjectiveToggle('wantsExtraReading')} 
-                        />
+                        <ChoiceCard icon={Scale} title="Perder peso" active={formData.onboardingChoices?.wantsWeightLoss} onClick={() => handleObjectiveToggle('wantsWeightLoss')} />
+                        <ChoiceCard icon={BookOpen} title="Leitura bíblica" active={formData.onboardingChoices?.wantsBibleReading} onClick={() => handleObjectiveToggle('wantsBibleReading')} />
+                        <ChoiceCard icon={Target} title="Leitura extra" active={formData.onboardingChoices?.wantsExtraReading} onClick={() => handleObjectiveToggle('wantsExtraReading')} />
                         <Button label="Continuar" onClick={nextStep} />
                     </div>
                 )}
@@ -181,12 +164,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                                 </select>
                             </div>
                         )}
-                        {formData.onboardingChoices?.wantsExtraReading && (
-                            <div className="space-y-4">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Target className="w-4 h-4"/> Meta de Leitura Extra</h3>
-                                <Input label="Quantos livros quer ler este ano?" type="number" value={formData.onboardingChoices?.extraReadingGoal} onChange={v => setFormData({...formData, onboardingChoices: {...formData.onboardingChoices!, extraReadingGoal: parseInt(v)}})} />
-                            </div>
-                        )}
                         <Button label="Continuar" onClick={nextStep} />
                     </div>
                 )}
@@ -209,7 +186,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                                 </button>
                             ))}
                         </div>
-                        <Button label="Finalizar Cadastro" onClick={handleSubmit} />
+                        <Button label={isSaving ? "Salvando..." : "Finalizar Cadastro"} onClick={handleSubmit} icon={isSaving ? <Loader2 className="animate-spin" /> : <ChevronRight />} />
                     </div>
                 )}
             </div>
@@ -220,37 +197,22 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
 const Input = ({ label, type, value, onChange }: any) => (
     <div className="space-y-2">
         <label className="text-xs font-bold text-slate-400 uppercase">{label}</label>
-        <input 
-            type={type} 
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500" 
-            value={value || ''} 
-            onChange={e => onChange(e.target.value)} 
-        />
+        <input type={type} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-bold" value={value || ''} onChange={e => onChange(e.target.value)} />
     </div>
 );
 
 const ChoiceCard = ({ icon: Icon, title, active, onClick }: any) => (
-    <button 
-        onClick={onClick}
-        className={`w-full p-6 rounded-3xl border-2 flex items-center gap-4 transition-all text-left ${
-            active ? 'border-indigo-600 bg-indigo-50 shadow-lg shadow-indigo-100' : 'border-slate-100 bg-white hover:border-indigo-200'
-        }`}
-    >
+    <button onClick={onClick} className={`w-full p-6 rounded-3xl border-2 flex items-center gap-4 transition-all text-left ${active ? 'border-indigo-600 bg-indigo-50 shadow-lg shadow-indigo-100' : 'border-slate-100 bg-white hover:border-indigo-200'}`}>
         <div className={`p-3 rounded-2xl ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
             <Icon className="w-6 h-6" />
         </div>
-        <div className="flex-1">
-            <h3 className={`font-bold ${active ? 'text-indigo-900' : 'text-slate-600'}`}>{title}</h3>
-        </div>
+        <div className="flex-1 font-bold">{title}</div>
         {active && <CheckCircle className="w-6 h-6 text-indigo-600" />}
     </button>
 );
 
-const Button = ({ label, onClick }: any) => (
-    <button 
-        onClick={onClick} 
-        className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-slate-200 flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95"
-    >
-        {label} <ChevronRight className="w-5 h-5" />
+const Button = ({ label, onClick, icon: Icon = <ChevronRight /> }: any) => (
+    <button onClick={onClick} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg shadow-xl flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95">
+        {label} {Icon}
     </button>
 );
