@@ -1,9 +1,8 @@
 
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getDatabase } from "firebase/database";
+import { initializeApp, getApp, getApps, FirebaseApp } from "firebase/app";
+import { getAuth, Auth } from "firebase/auth";
+import { getDatabase, Database } from "firebase/database";
 
-// Configuração do Firebase extraída do console
 const firebaseConfig = {
   apiKey: "AIzaSyBIAC3CvX_SoHnXZJZv3S0kqeN3ofRHg7U",
   authDomain: "treyo-77c7a.firebaseapp.com",
@@ -15,11 +14,16 @@ const firebaseConfig = {
   measurementId: "G-FER58V13NM"
 };
 
-// Inicializa o Firebase
-const app = initializeApp(firebaseConfig);
+// Inicialização segura do Firebase App
+const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Exporta as referências dos serviços conforme solicitado
-export const auth = getAuth(app);
-export const database = getDatabase(app);
+/**
+ * Em ambientes ESM/CDN, os componentes de serviço (auth, database) 
+ * registram-se no core do Firebase via efeitos colaterais.
+ * Chamar getAuth(app) e getDatabase(app) aqui garante que a 
+ * instância correta seja vinculada e exportada.
+ */
+export const auth: Auth = getAuth(app);
+export const database: Database = getDatabase(app);
 
 export default app;
