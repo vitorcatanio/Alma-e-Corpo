@@ -8,7 +8,7 @@ export const generateWorkoutSuggestion = async (
     
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const model = 'gemini-3-flash-preview';
+        const modelName = 'gemini-3-flash-preview';
 
         const prompt = `
         Crie um plano de treino detalhado para um cliente com o seguinte perfil:
@@ -18,11 +18,11 @@ export const generateWorkoutSuggestion = async (
         - Objetivo: ${profile.goal}
         
         Forneça uma lista estruturada de exercícios incluindo nome (em português do Brasil), séries, repetições (ou distância), carga (ou ritmo), e descanso.
-        Também forneça uma justificativa (rationale) para este treino.
+        Também forneça uma justificativa (rationale) para este treino. Responda APENAS com o JSON.
         `;
 
         const response = await ai.models.generateContent({
-            model: model,
+            model: modelName,
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -46,7 +46,7 @@ export const generateWorkoutSuggestion = async (
                             }
                         }
                     },
-                    propertyOrdering: ["title", "rationale", "exercises"]
+                    required: ["title", "rationale", "exercises"]
                 }
             }
         });
@@ -69,7 +69,7 @@ export const analyzeProgress = async (
 ): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const model = 'gemini-3-flash-preview';
+        const modelName = 'gemini-3-flash-preview';
         
         const historyStr = JSON.stringify(progressHistory);
         const prompt = `
@@ -80,7 +80,7 @@ export const analyzeProgress = async (
         `;
 
         const response = await ai.models.generateContent({
-            model: model,
+            model: modelName,
             contents: prompt,
         });
 
