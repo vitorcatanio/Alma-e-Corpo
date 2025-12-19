@@ -44,7 +44,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         }
                         onLogin(userData);
                     } else {
-                        // Se por algum motivo o Auth existe mas o DB não, criamos um registro básico
                         const newUser: User = { id: firebaseUser.uid, name: firebaseUser.displayName || 'Usuário', email: firebaseUser.email!, role: roleToUse };
                         await db.saveUserToDb(newUser);
                         onLogin(newUser);
@@ -55,7 +54,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     throw new Error('Todos os campos são obrigatórios');
                 }
                 
-                // Passando o roleToUse para o serviço de cadastro
                 const userCredential = await cadastrarUsuario(email, password, name, roleToUse);
                 const newUser: User = {
                     id: userCredential.user.uid,
@@ -66,10 +64,22 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 onLogin(newUser);
             }
         } catch (err: any) {
+            console.error("Auth Error Code:", err.code);
             let msg = err.message;
-            if (err.code === 'auth/email-already-in-use') msg = "Este e-mail já está em uso.";
-            if (err.code === 'auth/wrong-password') msg = "Senha incorreta.";
-            if (err.code === 'auth/user-not-found') msg = "Usuário não encontrado.";
+            
+            // Tratamento de erros específicos do Firebase
+            if (err.code === 'auth/operation-not-allowed') {
+                msg = "O provedor de E-mail/Senha não está ativado no Console do Firebase. Habilite-o em Authentication > Sign-in method.";
+            } else if (err.code === 'auth/email-already-in-use') {
+                msg = "Este e-mail já está em uso.";
+            } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+                msg = "E-mail ou senha incorretos.";
+            } else if (err.code === 'auth/weak-password') {
+                msg = "A senha deve ter pelo menos 6 caracteres.";
+            } else if (err.code === 'auth/invalid-email') {
+                msg = "O formato do e-mail é inválido.";
+            }
+            
             setError(msg);
         } finally {
             setIsLoading(false);
