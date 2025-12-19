@@ -27,34 +27,42 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [trainer, setTrainer] = useState<User | undefined>();
     const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+    const [loading, setLoading] = useState(true);
     
     useEffect(() => {
         const load = async () => {
-            // FIX: db.getProfile is async
-            const p = await db.getProfile(user.id);
-            const allUsers = db.getUsers();
-            const foundTrainer = allUsers.find(u => u.role === 'trainer');
-            
-            setTrainer(foundTrainer);
-            setProfile(p);
-            setWorkouts(db.getWorkouts(user.id));
-            setDiet(db.getDiet(user.id));
-            setProgress(db.getProgress(user.id));
-            setActivityLogs(db.getActivity(user.id));
-            
-            if (foundTrainer) {
-                setMessages(db.getMessages(user.id, foundTrainer.id));
+            try {
+                // Sincronização global
+                const allUsers = await db.getAllUsersFromDb();
+                const foundTrainer = allUsers.find(u => u.role === 'trainer');
+                const p = await db.getProfile(user.id);
+                
+                setTrainer(foundTrainer);
+                setProfile(p);
+                setWorkouts(db.getWorkouts(user.id));
+                setDiet(db.getDiet(user.id));
+                setProgress(db.getProgress(user.id));
+                setActivityLogs(db.getActivity(user.id));
+                
+                if (foundTrainer) {
+                    setMessages(db.getMessages(user.id, foundTrainer.id));
+                }
+                
+                setSpiritualPosts(db.getSpiritualPosts());
+                setLeaderboard(db.getReadingLeaderboard());
+                setEvents(db.getStudentEvents(user.id));
+            } catch (err) {
+                console.error("Erro ao sincronizar dados do aluno:", err);
+            } finally {
+                setLoading(false);
             }
-            
-            setSpiritualPosts(db.getSpiritualPosts());
-            setLeaderboard(db.getReadingLeaderboard());
-            setEvents(db.getStudentEvents(user.id));
         };
         load();
-        const interval = setInterval(load, 3000); 
+        const interval = setInterval(load, 5000); 
         return () => clearInterval(interval);
     }, [user.id, activeTab]);
 
+    if (loading && !profile) return <DashboardSkeleton />;
     if (!profile) return <DashboardSkeleton />;
 
     const isFitnessActive = profile.activeModules.fitness;
@@ -231,13 +239,10 @@ const WorkoutView = ({ workouts, user, profile }: { workouts: WorkoutPlan[], use
     if (!currentWorkout) return <Inativo msg="Nenhum treino prescrito ainda." />;
 
     const calculateCalories = (sport: SportType, durationMins: number) => {
-        // MET Values: Gym ~5, Running ~9.8, Walking ~3.5, Cycling ~8.0
         let met = 5;
         if (sport === SportType.RUNNING) met = 9.8;
         if (sport === SportType.WALKING) met = 3.5;
         if (sport === SportType.CYCLING) met = 8.0;
-
-        // Calories = MET * Weight (kg) * Time (hrs)
         return met * (profile.weight || 70) * (durationMins / 60);
     };
 
@@ -485,7 +490,6 @@ const SpiritualView = ({ user, posts, leaderboard }: { user: User, posts: Spirit
 
     const handleSendComment = (postId: string) => {
         if (!commentInput.trim()) return;
-        // FIX: storage service now has addSpiritualComment
         db.addSpiritualComment(postId, {
             userId: user.id,
             content: commentInput,

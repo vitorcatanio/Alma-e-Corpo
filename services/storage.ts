@@ -7,7 +7,6 @@ class StorageService {
   private dbRef = ref(database);
 
   init() {
-    // A inicialização agora é gerenciada pelo Firebase, mas mantemos o localStorage como cache rápido
     if (!localStorage.getItem('profiles')) localStorage.setItem('profiles', JSON.stringify([]));
     if (!localStorage.getItem('users')) localStorage.setItem('users', JSON.stringify([]));
     if (!localStorage.getItem('workouts')) localStorage.setItem('workouts', JSON.stringify([]));
@@ -19,10 +18,32 @@ class StorageService {
     if (!localStorage.getItem('spiritual_posts')) localStorage.setItem('spiritual_posts', JSON.stringify([]));
   }
 
-  // Persistência de Usuário no Database
+  // Busca TODOS os usuários do Firebase (Essencial para o Personal ver novos cadastros)
+  async getAllUsersFromDb(): Promise<User[]> {
+    const snapshot = await get(child(this.dbRef, 'users'));
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      const users = Object.values(data) as User[];
+      localStorage.setItem('users', JSON.stringify(users)); // Atualiza cache
+      return users;
+    }
+    return [];
+  }
+
+  // Busca TODOS os perfis do Firebase
+  async getAllProfilesFromDb(): Promise<UserProfile[]> {
+    const snapshot = await get(child(this.dbRef, 'profiles'));
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      const profiles = Object.values(data) as UserProfile[];
+      localStorage.setItem('profiles', JSON.stringify(profiles));
+      return profiles;
+    }
+    return [];
+  }
+
   async saveUserToDb(user: User) {
     await set(ref(database, 'users/' + user.id), user);
-    // Sync local storage cache
     const users = this.get<User>('users').filter(u => u.id !== user.id);
     users.push(user);
     localStorage.setItem('users', JSON.stringify(users));
@@ -33,36 +54,26 @@ class StorageService {
     return snapshot.exists() ? snapshot.val() as User : null;
   }
 
-  // Persistência de Perfil
   async saveProfile(profile: UserProfile) {
     if (!profile.userId) return;
     await set(ref(database, 'profiles/' + profile.userId), profile);
-    
-    // Atualiza cache local
     const localProfiles = this.get<UserProfile>('profiles').filter(p => p.userId !== profile.userId);
     localProfiles.push(profile);
     localStorage.setItem('profiles', JSON.stringify(localProfiles));
   }
 
   async getProfile(userId: string): Promise<UserProfile | undefined> {
-    // Tenta cache local primeiro para velocidade
-    const local = this.get<UserProfile>('profiles').find(p => p.userId === userId);
-    if (local) return local;
-
-    // Se não houver local, busca no Firebase
     const snapshot = await get(child(this.dbRef, `profiles/${userId}`));
     if (snapshot.exists()) {
       const profile = snapshot.val() as UserProfile;
-      // Salva no cache
-      const profiles = this.get<UserProfile>('profiles');
+      const profiles = this.get<UserProfile>('profiles').filter(p => p.userId !== userId);
       profiles.push(profile);
       localStorage.setItem('profiles', JSON.stringify(profiles));
       return profile;
     }
-    return undefined;
+    return this.get<UserProfile>('profiles').find(p => p.userId === userId);
   }
 
-  // Auxiliares LocalStorage (para compatibilidade de UI síncrona)
   private get<T>(key: string): T[] {
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
@@ -79,14 +90,12 @@ class StorageService {
     if (index !== -1) {
       users[index] = { ...users[index], ...updatedUser };
       localStorage.setItem('users', JSON.stringify(users));
-      // Sincroniza com Firebase
       if (updatedUser.id) {
           set(ref(database, 'users/' + updatedUser.id), users[index]);
       }
     }
   }
 
-  // FIX: Adicionando deleteUser
   deleteUser(userId: string) {
     const users = this.get<User>('users').filter(u => u.id !== userId);
     localStorage.setItem('users', JSON.stringify(users));
@@ -94,7 +103,6 @@ class StorageService {
     set(ref(database, 'profiles/' + userId), null);
   }
 
-  // Métodos de Treino, Dieta, etc
   getWorkouts(userId: string): WorkoutPlan[] { return this.get<WorkoutPlan>('workouts').filter(w => w.userId === userId); }
   saveWorkout(workout: WorkoutPlan) {
     let workouts = this.get<WorkoutPlan>('workouts');
@@ -124,7 +132,6 @@ class StorageService {
   }
   sendMessage(msg: ChatMessage) { localStorage.setItem('messages', JSON.stringify([...this.get<ChatMessage>('messages'), msg])); }
 
-  // FIX: Adicionando getEvents e addEvent
   getEvents(trainerId: string): CalendarEvent[] {
     return this.get<CalendarEvent>('events').filter(e => e.trainerId === trainerId).sort((a,b) => a.date.localeCompare(b.date));
   }
@@ -149,7 +156,6 @@ class StorageService {
   
   addSpiritualPost(post: SpiritualPost) { localStorage.setItem('spiritual_posts', JSON.stringify([post, ...this.get<SpiritualPost>('spiritual_posts')])); }
 
-  // FIX: Adicionando addSpiritualComment
   addSpiritualComment(postId: string, comment: SpiritualComment) {
     const posts = this.get<SpiritualPost>('spiritual_posts');
     const index = posts.findIndex(p => p.id === postId);
@@ -160,32 +166,29 @@ class StorageService {
     }
   }
 
-  // FIX: Implementando placeholders
-  checkInReading(userId: string) {
-    this.getProfile(userId).then(profile => {
-      if (profile) {
-        if (!profile.readingStats) {
-          profile.readingStats = { daysCompleted: 0, streak: 0, lastReadDate: '' };
-        }
-        const today = new Date().toISOString().split('T')[0];
-        if (profile.readingStats.lastReadDate !== today) {
-          profile.readingStats.daysCompleted += 1;
-          profile.readingStats.streak += 1;
-          profile.readingStats.lastReadDate = today;
-          profile.points += 50;
-          this.saveProfile(profile);
-        }
+  async checkInReading(userId: string) {
+    const profile = await this.getProfile(userId);
+    if (profile) {
+      if (!profile.readingStats) {
+        profile.readingStats = { daysCompleted: 0, streak: 0, lastReadDate: '' };
       }
-    });
+      const today = new Date().toISOString().split('T')[0];
+      if (profile.readingStats.lastReadDate !== today) {
+        profile.readingStats.daysCompleted += 1;
+        profile.readingStats.streak += 1;
+        profile.readingStats.lastReadDate = today;
+        profile.points = (profile.points || 0) + 50;
+        await this.saveProfile(profile);
+      }
+    }
   }
   
-  saveBookSuggestions(userId: string, suggestions: string[]) {
-    this.getProfile(userId).then(profile => {
-      if (profile) {
-        profile.bookSuggestions = suggestions;
-        this.saveProfile(profile);
-      }
-    });
+  async saveBookSuggestions(userId: string, suggestions: string[]) {
+    const profile = await this.getProfile(userId);
+    if (profile) {
+      profile.bookSuggestions = suggestions;
+      await this.saveProfile(profile);
+    }
   }
 }
 
