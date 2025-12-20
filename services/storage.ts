@@ -1,13 +1,17 @@
 
 import { ref, set, get, child, remove } from "firebase/database";
 import { database } from "../firebase-config";
-import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, BookReview, WishlistBook, LibraryComment, SpiritualPost } from '../types';
+import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, BookReview, WishlistBook, LibraryComment, SpiritualPost, CommunityPost } from '../types';
 
 class StorageService {
   private dbRef = ref(database);
 
   init() {
-    const keys = ['profiles', 'users', 'workouts', 'diets', 'progress', 'activity', 'messages', 'events', 'spiritual_posts', 'book_reviews', 'book_wishlist'];
+    const keys = [
+      'profiles', 'users', 'workouts', 'diets', 'progress', 'activity', 
+      'messages', 'events', 'spiritual_posts', 'book_reviews', 
+      'book_wishlist', 'community_posts'
+    ];
     keys.forEach(key => {
         if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify([]));
     });
@@ -177,24 +181,21 @@ class StorageService {
       if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '' };
       const today = new Date().toISOString().split('T')[0];
       
-      // Se não leu hoje ainda, incrementa dias e streak
       if (profile.readingStats.lastReadDate !== today) {
         profile.readingStats.daysCompleted += 1;
         profile.readingStats.streak += 1;
         profile.readingStats.lastReadDate = today;
       }
       
-      // Soma os capítulos (pode ler mais de uma vez por dia)
       profile.readingStats.totalChaptersRead += chaptersRead;
-      
-      // Limita ao máximo da bíblia (opcional, para não estourar 1.189)
       if (profile.readingStats.totalChaptersRead > 1189) profile.readingStats.totalChaptersRead = 1189;
 
-      profile.points = (profile.points || 0) + (chaptersRead * 10); // 10 pontos por capítulo
+      profile.points = (profile.points || 0) + (chaptersRead * 10);
       await this.saveProfile(profile);
     }
   }
 
+  // SPIRITUAL METHODS (REFLECTIONS)
   getSpiritualPosts(): SpiritualPost[] {
     return this.getLocal<SpiritualPost>('spiritual_posts').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
@@ -202,6 +203,16 @@ class StorageService {
   addSpiritualPost(post: SpiritualPost) {
     const posts = this.getLocal<SpiritualPost>('spiritual_posts');
     this.setLocal('spiritual_posts', [post, ...posts]);
+  }
+
+  // COMMUNITY METHODS (CHAT)
+  getCommunityPosts(): CommunityPost[] {
+    return this.getLocal<CommunityPost>('community_posts').sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }
+
+  addCommunityPost(post: CommunityPost) {
+    const posts = this.getLocal<CommunityPost>('community_posts');
+    this.setLocal('community_posts', [...posts, post]);
   }
 }
 

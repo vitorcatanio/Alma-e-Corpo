@@ -69,9 +69,6 @@ export interface WishlistBook {
     addedAt: string;
 }
 
-/**
- * Interface representing a badge earned by a user.
- */
 export interface Badge {
   id: string;
   name: string;
@@ -79,9 +76,6 @@ export interface Badge {
   description: string;
 }
 
-/**
- * Interface representing a comment on a spiritual post.
- */
 export interface SpiritualComment {
     id: string;
     userId: string;
@@ -90,16 +84,23 @@ export interface SpiritualComment {
     timestamp: string;
 }
 
-/**
- * Interface representing a spiritual reflection post in the community.
- */
 export interface SpiritualPost {
     id: string;
     userId: string;
+    userName: string;
     content: string;
     timestamp: string;
     likes: number;
     comments: SpiritualComment[];
+}
+
+export interface CommunityPost {
+    id: string;
+    userId: string;
+    userName: string;
+    userAvatar?: string;
+    content: string;
+    timestamp: string;
 }
 
 export interface UserProfile {
@@ -114,7 +115,6 @@ export interface UserProfile {
   onboardingCompleted: boolean;
   waterGoal?: number;
   
-  // Módulos Ativos
   activeModules: {
     fitness: boolean;
     spiritual: boolean;
