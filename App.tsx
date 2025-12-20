@@ -9,7 +9,7 @@ import { db } from './services/storage';
 import { User, UserRole, UserProfile } from './types';
 import { auth } from './firebase-config';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Dumbbell, AlertTriangle, RefreshCcw, Loader2, Database, ShieldAlert, ExternalLink } from 'lucide-react';
+import { Dumbbell, AlertTriangle, RefreshCcw, Loader2 } from 'lucide-react';
 
 function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [step, setStep] = useState(0);
@@ -46,74 +46,60 @@ function App() {
   const [hasError, setHasError] = useState(false);
   const [errorType, setErrorType] = useState<'generic' | 'permission'>('generic');
   const [isInitializing, setIsInitializing] = useState(true);
-  const [isProfileLoading, setIsProfileLoading] = useState(false);
+
+  // Lógica para interceptar o botão voltar do celular
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (activeTab !== 'dashboard') {
+        event.preventDefault();
+        setActiveTab('dashboard');
+        // Re-push para manter o usuário no app na próxima vez que clicar em voltar
+        window.history.pushState({ tab: 'dashboard' }, '');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab]);
+
+  // Sempre que a aba mudar, adicionamos uma entrada no histórico do navegador
+  useEffect(() => {
+    window.history.pushState({ tab: activeTab }, '');
+  }, [activeTab]);
 
   useEffect(() => {
     db.init();
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsProfileLoading(true);
       try {
         if (firebaseUser) {
           const userData = await db.getUserFromDb(firebaseUser.uid);
           const userProfile = await db.getProfile(firebaseUser.uid);
           
-          if (userData) {
-            setUser(userData);
-          } else {
-            // Fallback se o user não existir no DB ainda
-            const fallbackUser: User = {
-              id: firebaseUser.uid,
-              name: firebaseUser.displayName || 'Usuário',
-              email: firebaseUser.email || '',
-              role: UserRole.STUDENT 
-            };
-            setUser(fallbackUser);
-          }
-          
-          if (userProfile) {
-            setProfile(userProfile);
-          } else {
-            setProfile(null);
-          }
+          if (userData) setUser(userData);
+          if (userProfile) setProfile(userProfile);
         } else {
           setUser(null);
           setProfile(null);
         }
-        setHasError(false);
       } catch (e: any) {
-        console.error("Sync Error:", e);
         if (e.message?.includes('Permission denied')) {
             setErrorType('permission');
             setHasError(true);
         }
       } finally {
         setIsInitializing(false);
-        setIsProfileLoading(false);
       }
     });
 
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = (loggedInUser: User) => {
-    setUser(loggedInUser);
-    setActiveTab('dashboard'); 
-    setHasError(false);
-  };
-
   const handleLogout = async () => {
     await auth.signOut();
     setUser(null);
     setProfile(null);
     setActiveTab('dashboard');
-  };
-
-  const handleOnboardingComplete = async () => {
-    if (user) {
-        const newProfile = await db.getProfile(user.id);
-        setProfile(newProfile || null);
-    }
   };
 
   if (isInitializing) {
@@ -124,40 +110,22 @@ function App() {
     );
   }
 
-  if (hasError) {
-      return (
-          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
-              <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-6">
-                <AlertTriangle className="w-12 h-12 text-red-500" />
-              </div>
-              <h2 className="text-3xl font-black mb-2 text-slate-900">Erro de Sincronização</h2>
-              <p className="text-slate-500 max-w-md mb-8 font-medium">
-                {errorType === 'permission' 
-                  ? "As regras de segurança do seu banco de dados estão bloqueando o acesso." 
-                  : "Não conseguimos conectar com o servidor do TREYO."}
-              </p>
-              <button onClick={() => window.location.reload()} className="bg-white border-2 border-slate-200 text-slate-900 px-8 py-4 rounded-2xl font-black flex items-center gap-2">
-                <RefreshCcw className="w-5 h-5" /> Tentar Novamente
-              </button>
-          </div>
-      );
-  }
-
-  // FLUXO DE TELAS
   if (!user) {
     return (
         <>
             {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
             <div className={showSplash ? 'opacity-0' : 'opacity-100 transition-opacity duration-500'}>
-               <Auth onLogin={handleLogin} />
+               <Auth onLogin={(u) => setUser(u)} />
             </div>
         </>
     );
   }
 
-  // Se for ALUNO e NÃO tiver perfil completado, mostra Onboarding
   if (user.role === UserRole.STUDENT && (!profile || !profile.onboardingCompleted)) {
-      return <Onboarding user={user} onComplete={handleOnboardingComplete} />;
+      return <Onboarding user={user} onComplete={async () => {
+          const p = await db.getProfile(user.id);
+          setProfile(p || null);
+      }} />;
   }
 
   return (
