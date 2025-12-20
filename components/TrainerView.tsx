@@ -389,4 +389,126 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             return <div className="p-20 text-center text-slate-400 font-bold">Módulo em desenvolvimento.</div>;
     }
 };
-// ... rest of file unchanged
+
+// --- Helper Components ---
+
+const StatCard = ({ label, value, icon: Icon, color }: any) => (
+    <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6 group hover:shadow-md transition-all">
+        <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform`}>
+            <Icon className="w-7 h-7" />
+        </div>
+        <div>
+            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">{label}</p>
+            <p className="text-2xl font-black text-slate-900">{value}</p>
+        </div>
+    </div>
+);
+
+const ActionButton = ({ onClick, icon: Icon, label, sub, color, hColor }: any) => (
+    <button onClick={onClick} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all text-left group flex flex-col gap-6">
+        <div className={`w-14 h-14 ${color} ${hColor} group-hover:text-white rounded-2xl flex items-center justify-center transition-all`}>
+            <Icon className="w-7 h-7" />
+        </div>
+        <div>
+            <h3 className="font-bold text-lg text-slate-900">{label}</h3>
+            <p className="text-xs text-slate-400 font-medium">{sub}</p>
+        </div>
+    </button>
+);
+
+const TrainerChatView = ({ students, user }: { students: User[], user: User }) => {
+    const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [input, setInput] = useState('');
+
+    useEffect(() => {
+        if (selectedStudent) {
+            const msgs = db.getMessages(user.id, selectedStudent.id);
+            setMessages(msgs);
+            const interval = setInterval(() => {
+                setMessages(db.getMessages(user.id, selectedStudent.id));
+            }, 3000);
+            return () => clearInterval(interval);
+        }
+    }, [selectedStudent, user.id]);
+
+    const handleSendMessage = () => {
+        if (!input || !selectedStudent) return;
+        const msg: ChatMessage = {
+            id: Date.now().toString(),
+            senderId: user.id,
+            receiverId: selectedStudent.id,
+            content: input,
+            timestamp: new Date().toISOString(),
+            read: false
+        };
+        db.sendMessage(msg);
+        setInput('');
+        setMessages(db.getMessages(user.id, selectedStudent.id));
+    };
+
+    return (
+        <div className="bg-white h-[calc(100vh-200px)] rounded-[3rem] border border-slate-100 shadow-2xl flex overflow-hidden animate-fade-in">
+            {/* Sidebar Alunos */}
+            <div className="w-80 border-r border-slate-50 flex flex-col bg-slate-50/30">
+                <div className="p-8 border-b border-slate-50 bg-white">
+                    <h3 className="font-black text-slate-900 text-lg">Conversas</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                    {students.map(s => (
+                        <button 
+                            key={s.id} 
+                            onClick={() => setSelectedStudent(s)}
+                            className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${selectedStudent?.id === s.id ? 'bg-slate-900 text-white shadow-lg' : 'hover:bg-white text-slate-600'}`}
+                        >
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${selectedStudent?.id === s.id ? 'bg-indigo-600' : 'bg-slate-200 text-slate-400'}`}>
+                                {s.name.charAt(0)}
+                            </div>
+                            <span className="font-bold text-sm truncate">{s.name}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Area do Chat */}
+            <div className="flex-1 flex flex-col bg-white">
+                {selectedStudent ? (
+                    <>
+                        <div className="p-8 border-b border-slate-50 flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black">{selectedStudent.name.charAt(0)}</div>
+                            <h3 className="font-black text-slate-900 text-xl">{selectedStudent.name}</h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-slate-50/20">
+                            {messages.map(m => (
+                                <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[70%] p-6 rounded-3xl shadow-sm font-medium ${m.senderId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'}`}>
+                                        <p className="text-sm">{m.content}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-8 border-t border-slate-50">
+                            <div className="relative">
+                                <input 
+                                    className="w-full pl-8 pr-24 py-5 bg-slate-50 border-2 border-transparent rounded-[2rem] outline-none shadow-inner focus:bg-white focus:border-indigo-500 font-bold transition-all" 
+                                    placeholder="Responder aluno..." 
+                                    value={input} 
+                                    onChange={e => setInput(e.target.value)} 
+                                    onKeyPress={e => e.key === 'Enter' && handleSendMessage()} 
+                                />
+                                <button onClick={handleSendMessage} className="absolute right-3 top-3 bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all">
+                                    <Send className="w-6 h-6" />
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic">
+                        <MessageCircle className="w-16 h-16 opacity-10" />
+                        <p>Selecione um aluno para iniciar a conversa.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
