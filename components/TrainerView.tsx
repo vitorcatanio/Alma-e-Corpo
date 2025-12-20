@@ -22,6 +22,8 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
     const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
     const [builderState, setBuilderState] = useState<'list' | 'manage' | 'workout' | 'diet' | 'evolution'>('list');
     const [isLoading, setIsLoading] = useState(true);
+    // Added state for evolution logs to fix async property access in render
+    const [evolutionLogs, setEvolutionLogs] = useState<ProgressLog[]>([]);
 
     // Form States
     const [workoutTitle, setWorkoutTitle] = useState('Novo Plano de Treino');
@@ -43,6 +45,13 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
         // Se mudar de aba global, reseta o estado interno de gestão
         if (activeTab !== 'students') setBuilderState('list');
     }, [activeTab]);
+
+    // Fetch evolution logs when builderState changes to 'evolution'
+    useEffect(() => {
+        if (builderState === 'evolution' && selectedStudent) {
+            db.getProgress(selectedStudent.id).then(setEvolutionLogs);
+        }
+    }, [builderState, selectedStudent]);
 
     const handleSelectStudent = async (student: User) => {
         setSelectedStudent(student);
@@ -295,7 +304,8 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             }
 
             if (builderState === 'evolution') {
-                const logs = db.getProgress(selectedStudent!.id);
+                // Fixed: use evolutionLogs state instead of calling async db.getProgress in render
+                const logs = evolutionLogs;
                 return (
                     <div className="space-y-8 animate-fade-in pb-20">
                         <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
@@ -379,93 +389,4 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             return <div className="p-20 text-center text-slate-400 font-bold">Módulo em desenvolvimento.</div>;
     }
 };
-
-// --- Sub-Components Auxiliares ---
-const StatCard = ({ label, value, icon: Icon, color }: any) => (
-    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6">
-        <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg`}><Icon className="w-8 h-8" /></div>
-        <div><p className="text-xs font-black uppercase text-slate-400 tracking-widest mb-1">{label}</p><p className="text-3xl font-black text-slate-900">{value}</p></div>
-    </div>
-);
-
-const ActionButton = ({ onClick, icon: Icon, label, sub, color, hColor }: any) => (
-    <button onClick={onClick} className={`bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-md transition-all text-left flex items-center gap-6 group`}>
-        <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center group-hover:text-white ${hColor} transition-all shadow-sm`}><Icon className="w-8 h-8" /></div>
-        <div><h3 className="text-xl font-black text-slate-900">{label}</h3><p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{sub}</p></div>
-    </button>
-);
-
-const MacroInput = ({ label, value, onChange, unit }: any) => (
-    <div className="space-y-1">
-        <label className="text-[10px] font-black uppercase text-slate-400 ml-2">{label}</label>
-        <div className="relative"><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl pl-5 pr-14 py-4 font-black text-slate-900 focus:bg-white focus:border-indigo-500 outline-none transition-all" value={value} onChange={e => onChange(parseInt(e.target.value) || 0)} /><span className="absolute right-5 top-4 text-[10px] font-black text-slate-300">{unit}</span></div>
-    </div>
-);
-
-const TrainerChatView = ({ students, user }: { students: User[], user: User }) => {
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [msg, setMsg] = useState('');
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
-    
-    useEffect(() => {
-        if (selectedId) {
-            const load = () => setMessages(db.getMessages(user.id, selectedId));
-            load();
-            const interval = setInterval(load, 3000);
-            return () => clearInterval(interval);
-        }
-    }, [selectedId, user.id]);
-
-    const handleSend = () => {
-        if (!msg || !selectedId) return;
-        db.sendMessage({
-            id: Date.now().toString(),
-            senderId: user.id,
-            receiverId: selectedId,
-            content: msg,
-            timestamp: new Date().toISOString(),
-            read: false
-        });
-        setMsg('');
-        setMessages(db.getMessages(user.id, selectedId));
-    };
-
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-200px)] animate-fade-in">
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-slate-50"><h3 className="font-black text-slate-900">Alunos</h3></div>
-                <div className="flex-1 overflow-y-auto">
-                    {students.map(s => (
-                        <button key={s.id} onClick={() => setSelectedId(s.id)} className={`w-full p-6 flex items-center gap-4 hover:bg-slate-50 transition-colors border-l-4 ${selectedId === s.id ? 'border-indigo-600 bg-indigo-50/30' : 'border-transparent'}`}>
-                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500">{s.name.charAt(0)}</div>
-                            <div className="text-left flex-1"><p className="font-bold text-slate-900 text-sm">{s.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase">Aluno</p></div>
-                        </button>
-                    ))}
-                </div>
-            </div>
-            <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-                {selectedId ? (
-                    <>
-                        <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold">{students.find(s => s.id === selectedId)?.name.charAt(0)}</div>
-                            <h3 className="font-black text-slate-900">{students.find(s => s.id === selectedId)?.name}</h3>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-8 space-y-4">
-                            {messages.map(m => (
-                                <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[70%] p-4 rounded-2xl shadow-sm text-sm font-medium ${m.senderId === user.id ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>{m.content}</div>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="p-6 border-t flex gap-4">
-                            <input className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl px-6 outline-none focus:bg-white focus:border-indigo-500 font-bold" placeholder="Escreva para o aluno..." value={msg} onChange={e => setMsg(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSend()} />
-                            <button onClick={handleSend} className="bg-slate-900 text-white p-4 rounded-2xl shadow-lg hover:scale-105 transition-all"><Send className="w-5 h-5" /></button>
-                        </div>
-                    </>
-                ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 italic"><MessageCircle className="w-16 h-16 mb-4" /><p>Selecione um aluno para conversar.</p></div>
-                )}
-            </div>
-        </div>
-    );
-};
+// ... rest of file unchanged

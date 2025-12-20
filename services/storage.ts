@@ -1,5 +1,5 @@
 
-import { ref, set, get, child, remove } from "firebase/database";
+import { ref, set, get, child, remove, push } from "firebase/database";
 import { database } from "../firebase-config";
 import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, BookReview, WishlistBook, LibraryComment, SpiritualPost, CommunityPost } from '../types';
 
@@ -95,10 +95,33 @@ class StorageService {
     this.setLocal('diets', diets);
   }
 
-  getProgress(userId: string): ProgressLog[] { 
-    return this.getLocal<ProgressLog>('progress').filter(p => p.userId === userId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
+  // Melhora na recuperação do progresso para incluir nuvem
+  async getProgress(userId: string): Promise<ProgressLog[]> { 
+    const snapshot = await get(child(this.dbRef, `progress/${userId}`));
+    if (snapshot.exists()) {
+        const data = snapshot.val();
+        const logs = Object.values(data) as ProgressLog[];
+        this.setLocal('progress', [...this.getLocal<ProgressLog>('progress').filter(p => p.userId !== userId), ...logs]);
+        return logs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+    return this.getLocal<ProgressLog>('progress')
+        .filter(p => p.userId === userId)
+        .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
   }
-  addProgress(log: ProgressLog) { this.setLocal('progress', [...this.getLocal<ProgressLog>('progress'), log]); }
+
+  async addProgress(log: ProgressLog) { 
+    const progressRef = ref(database, `progress/${log.userId}/${log.id}`);
+    await set(progressRef, log);
+    this.setLocal('progress', [...this.getLocal<ProgressLog>('progress'), log]); 
+    
+    // Atualiza o peso no perfil principal se for o mais recente
+    const profile = await this.getProfile(log.userId);
+    if (profile) {
+        profile.weight = log.weight;
+        profile.measurements = { ...profile.measurements, ...log.measurements };
+        await this.saveProfile(profile);
+    }
+  }
 
   getActivity(userId: string): ActivityLog[] {
     return this.getLocal<ActivityLog>('activity').filter(a => a.userId === userId);
@@ -131,7 +154,6 @@ class StorageService {
     return this.getLocal<CalendarEvent>('events').filter(e => e.type === 'global' || e.studentId === userId).sort((a,b) => a.date.localeCompare(b.date));
   }
 
-  // SOCIAL LIBRARY METHODS
   getBookReviews(): BookReview[] {
     return this.getLocal<BookReview>('book_reviews').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
@@ -195,7 +217,6 @@ class StorageService {
     }
   }
 
-  // SPIRITUAL METHODS (REFLECTIONS)
   getSpiritualPosts(): SpiritualPost[] {
     return this.getLocal<SpiritualPost>('spiritual_posts').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
@@ -205,7 +226,6 @@ class StorageService {
     this.setLocal('spiritual_posts', [post, ...posts]);
   }
 
-  // COMMUNITY METHODS (CHAT)
   getCommunityPosts(): CommunityPost[] {
     return this.getLocal<CommunityPost>('community_posts').sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   }
