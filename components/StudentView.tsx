@@ -49,7 +49,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(loadData, 8000); 
+        const interval = setInterval(loadData, 10000); 
         return () => clearInterval(interval);
     }, [user.id, activeTab]);
 
@@ -159,7 +159,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
     }
 };
 
-// --- SUB-VIEWS DETALHADAS ---
+// --- ESTRUTURA BÍBLICA E PLANOS ---
 
 const BIBLE_STRUCTURE: Record<string, number> = {
     'Gênesis': 50, 'Êxodo': 40, 'Levítico': 27, 'Números': 36, 'Deuteronômio': 34,
@@ -190,6 +190,7 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
     const [view, setView] = useState<'plans' | 'active'>('plans');
     const [selectedPlan, setSelectedPlan] = useState<ReadingPlan | null>(null);
     const [expandedBook, setExpandedBook] = useState<string | null>(null);
+    const [filterCategory, setFilterCategory] = useState<string>('all');
 
     useEffect(() => {
         if (profile.readingStats?.activePlanId) {
@@ -201,9 +202,9 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
         }
     }, [profile.readingStats?.activePlanId]);
 
-    const handleStartPlan = (plan: ReadingPlan) => {
+    const handleStartPlan = async (plan: ReadingPlan) => {
         const updatedProfile = { ...profile, readingStats: { ...profile.readingStats, activePlanId: plan.id } };
-        db.saveProfile(updatedProfile);
+        await db.saveProfile(updatedProfile);
         setSelectedPlan(plan);
         setView('active');
         onUpdate();
@@ -211,8 +212,10 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
 
     const toggleChapter = async (book: string, chapter: number) => {
         await db.checkInReading(user.id, book, chapter);
-        onUpdate();
+        onUpdate(); // Recarrega os dados para atualizar pontos e UI
     };
+
+    const planCategories = ['Anual', 'Cronológico', 'Temático', 'NT', 'Sabedoria'];
 
     return (
         <div className="space-y-10 animate-fade-in pb-20">
@@ -223,7 +226,7 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                     <div className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
                         <div className="relative z-10">
                             <h2 className="text-3xl font-black mb-2 text-white">Ápice Espiritual</h2>
-                            <p className="text-slate-400 font-medium">Cada capítulo lido é um degrau na sua evolução.</p>
+                            <p className="text-slate-400 font-medium">Cresça em conhecimento e sabedoria todos os dias.</p>
                             
                             <div className="mt-8 flex items-center gap-6">
                                 <div className="w-24 h-24 rounded-full border-4 border-amber-400/20 flex items-center justify-center relative">
@@ -231,8 +234,8 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                     <span className="text-2xl font-black text-amber-400">{profile.level}</span>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Pontos Totais</p>
-                                    <p className="text-4xl font-black text-white">{profile.points || 0} <span className="text-xs text-slate-500">PTS</span></p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Pontos de Estudo</p>
+                                    <p className="text-4xl font-black text-white">{profile.points || 0} <span className="text-xs text-slate-500 font-bold">PTS</span></p>
                                 </div>
                             </div>
                         </div>
@@ -241,18 +244,18 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
 
                     {selectedPlan && view === 'active' ? (
                         <div className="space-y-6">
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => setView('plans')} className="p-2 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-indigo-600 transition-all">
+                            <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+                                <div className="flex items-center gap-4">
+                                    <button onClick={() => setView('plans')} className="p-3 bg-slate-50 rounded-2xl text-slate-400 hover:text-indigo-600 transition-all">
                                         <ArrowLeft className="w-5 h-5" />
                                     </button>
                                     <div>
-                                        <h3 className="text-2xl font-black text-slate-900 leading-tight">{selectedPlan.name}</h3>
-                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedPlan.category}</p>
+                                        <h3 className="text-xl font-black text-slate-900 leading-tight">{selectedPlan.name}</h3>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{selectedPlan.category}</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-xs font-black text-indigo-600 uppercase">Seu Progresso</span>
+                                    <span className="text-[10px] font-black text-emerald-600 uppercase">Seu Progresso</span>
                                     <p className="text-2xl font-black text-slate-900">
                                         {Math.round(((profile.readingStats?.readChapters?.length || 0) / 1189) * 100)}%
                                     </p>
@@ -295,7 +298,7 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                                             key={chap} 
                                                             onClick={() => toggleChapter(book, chap)}
                                                             className={`h-10 rounded-lg font-black text-xs transition-all flex items-center justify-center border shadow-sm ${
-                                                                isRead ? 'bg-indigo-600 border-indigo-600 text-white scale-95' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-300 active:scale-90'
+                                                                isRead ? 'bg-indigo-600 border-indigo-600 text-white scale-95 shadow-indigo-100' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-300 active:scale-90'
                                                             }`}
                                                         >
                                                             {isRead ? <Check className="w-4 h-4" /> : chap}
@@ -310,20 +313,34 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                         </div>
                     ) : (
                         <div className="space-y-8">
-                            <h3 className="text-3xl font-black text-slate-900">Escolha seu Plano</h3>
+                            <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+                                <h3 className="text-2xl font-black text-slate-900">Escolha seu Plano</h3>
+                                <div className="flex bg-white p-1 rounded-xl border border-slate-100 shadow-sm overflow-x-auto max-w-full">
+                                    <button onClick={() => setFilterCategory('all')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterCategory === 'all' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Todos</button>
+                                    {planCategories.map(cat => (
+                                        <button key={cat} onClick={() => setFilterCategory(cat)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterCategory === cat ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>{cat}</button>
+                                    ))}
+                                </div>
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {BIBLE_PLANS.map(plan => (
-                                    <div key={plan.id} className={`p-8 rounded-[2.5rem] border transition-all flex flex-col ${profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-50 border-indigo-200 shadow-lg' : 'bg-white border-slate-100 hover:shadow-xl'}`}>
+                                {BIBLE_PLANS
+                                    .filter(p => filterCategory === 'all' || p.category === filterCategory)
+                                    .map(plan => (
+                                    <div key={plan.id} className={`p-8 rounded-[2.5rem] border transition-all flex flex-col ${profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-50 border-indigo-200 shadow-xl scale-[1.02]' : 'bg-white border-slate-100 hover:shadow-xl'}`}>
                                         <div className="flex justify-between items-start mb-6">
                                             <span className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">{plan.category}</span>
-                                            {profile.readingStats?.activePlanId === plan.id && <span className="text-[10px] font-black text-indigo-600 flex items-center gap-1"><Check className="w-3 h-3"/> ATIVO</span>}
+                                            {profile.readingStats?.activePlanId === plan.id && (
+                                                <div className="flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black uppercase animate-pulse">
+                                                    <Check className="w-3 h-3"/> ATIVO
+                                                </div>
+                                            )}
                                         </div>
                                         <h4 className="text-xl font-black text-slate-900 mb-2">{plan.name}</h4>
                                         <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8 flex-1">{plan.description}</p>
                                         <button 
                                             onClick={() => handleStartPlan(plan)}
                                             className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
-                                                profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white'
+                                                profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white'
                                             }`}
                                         >
                                             {profile.readingStats?.activePlanId === plan.id ? 'CONTINUAR ESTE' : 'INICIAR ESTE PLANO'}
@@ -335,56 +352,64 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                     )}
                 </div>
 
-                {/* Coluna Lateral: Ranking Real */}
+                {/* Coluna Lateral: Ranking de Usuários Reais */}
                 <div className="w-full lg:w-96 space-y-8">
-                    <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-sm flex flex-col h-full max-h-[800px]">
+                    <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-xl flex flex-col h-fit max-h-[85vh] sticky top-8">
                         <div className="flex items-center gap-3 mb-8">
-                            <div className="p-3 bg-amber-50 rounded-2xl text-amber-500">
+                            <div className="p-3.5 bg-amber-50 rounded-2xl text-amber-500">
                                 <Medal className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-black text-slate-900">Ranking Real</h3>
-                                <p className="text-[10px] font-black text-slate-400 uppercase">Gamificação Espiritual</p>
+                                <h3 className="text-xl font-black text-slate-900 leading-none">Ranking Global</h3>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Guerreiros Treyo</p>
                             </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
                             {leaderboard.length === 0 ? (
-                                <div className="text-center py-10">
-                                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-slate-200" />
-                                    <p className="text-xs font-bold text-slate-300 mt-2">Carregando Ranking...</p>
+                                <div className="text-center py-20 bg-slate-50 rounded-3xl">
+                                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-slate-200" />
+                                    <p className="text-xs font-black text-slate-400 mt-4 uppercase">Sincronizando Ranking...</p>
                                 </div>
                             ) : leaderboard.map((u, idx) => (
-                                <div key={u.userId} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${u.userId === user.id ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-slate-50'}`}>
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${idx === 0 ? 'bg-amber-400 text-white shadow-sm' : idx === 1 ? 'bg-slate-300 text-white' : idx === 2 ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                <div key={u.userId} className={`flex items-center gap-4 p-4 rounded-2xl transition-all border ${u.userId === user.id ? 'bg-slate-900 border-slate-900 text-white shadow-xl scale-[1.05]' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                                        idx === 0 ? 'bg-amber-400 text-white' : 
+                                        idx === 1 ? 'bg-slate-300 text-white' : 
+                                        idx === 2 ? 'bg-amber-600 text-white' : 
+                                        'bg-white border border-slate-100 text-slate-400'
+                                    }`}>
                                         {idx + 1}
                                     </div>
-                                    <div className="w-10 h-10 rounded-xl bg-slate-200 overflow-hidden border-2 border-white shadow-sm shrink-0">
+                                    <div className="w-11 h-11 rounded-xl bg-slate-200 overflow-hidden border-2 border-white shadow-sm shrink-0">
                                         {u.avatarUrl ? (
                                             <img src={u.avatarUrl} alt={u.userName} className="w-full h-full object-cover" />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center font-black text-slate-400 text-xs">
+                                            <div className="w-full h-full flex items-center justify-center font-black text-slate-400 text-sm">
                                                 {u.userName.charAt(0)}
                                             </div>
                                         )}
                                     </div>
                                     <div className="flex-1 overflow-hidden">
                                         <p className="font-bold text-sm truncate">{u.userName}</p>
-                                        <p className={`text-[9px] font-black uppercase ${u.userId === user.id ? 'text-indigo-200' : 'text-slate-400'}`}>Nível {u.level}</p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${u.userId === user.id ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-500'}`}>LVL {u.level}</span>
+                                            {idx < 3 && <Trophy className="w-3 h-3 text-amber-400" />}
+                                        </div>
                                     </div>
                                     <div className="text-right shrink-0">
-                                        <p className="font-black text-sm">{u.points || 0}</p>
-                                        <p className={`text-[8px] font-bold uppercase ${u.userId === user.id ? 'text-indigo-200' : 'text-slate-400'}`}>PTS</p>
+                                        <p className="font-black text-sm leading-none">{u.points || 0}</p>
+                                        <p className={`text-[8px] font-bold uppercase tracking-tighter ${u.userId === user.id ? 'text-slate-400' : 'text-slate-400'}`}>PONTOS</p>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     </div>
                     
-                    <div className="bg-indigo-50 p-8 rounded-[2.5rem] border border-indigo-100">
-                        <h4 className="font-black text-indigo-900 mb-2 flex items-center gap-2"><Trophy className="w-4 h-4"/> Como ganhar?</h4>
-                        <p className="text-xs text-indigo-700 font-medium leading-relaxed">
-                            Você ganha **10 pontos** para cada capítulo novo que marcar como lido. Releituras não somam pontos adicionais para manter o ranking justo para todos!
+                    <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-indigo-100">
+                        <h4 className="font-black text-lg mb-2 flex items-center gap-2">Como subir?</h4>
+                        <p className="text-xs text-indigo-100 font-medium leading-relaxed">
+                            Marque capítulos como lidos para ganhar **10 pontos** cada. Se você desmarcar, os pontos são removidos. Apenas capítulos únicos contam pontos!
                         </p>
                     </div>
                 </div>
@@ -393,6 +418,8 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
         </div>
     );
 };
+
+// --- MANTENDO OUTROS COMPONENTES ---
 
 const WorkoutView = ({ workouts, user }: any) => {
     const [activeSplit, setActiveSplit] = useState(workouts[0]?.id || '');

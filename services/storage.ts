@@ -60,8 +60,7 @@ class StorageService {
   async getProfile(userId: string): Promise<UserProfile | undefined> {
     const snapshot = await get(child(this.dbRef, `profiles/${userId}`));
     if (snapshot.exists()) {
-      const profile = snapshot.val() as UserProfile;
-      return profile;
+      return snapshot.val() as UserProfile;
     }
     return this.getLocal<UserProfile>('profiles').find(p => p.userId === userId);
   }
@@ -96,8 +95,7 @@ class StorageService {
     const snapshot = await get(child(this.dbRef, `progress/${userId}`));
     if (snapshot.exists()) {
         const data = snapshot.val();
-        const logs = Object.values(data) as ProgressLog[];
-        return logs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return Object.values(data) as ProgressLog[];
     }
     return [];
   }
@@ -105,12 +103,6 @@ class StorageService {
   async addProgress(log: ProgressLog) { 
     const progressRef = ref(database, `progress/${log.userId}/${log.id}`);
     await set(progressRef, log);
-    const profile = await this.getProfile(log.userId);
-    if (profile) {
-        profile.weight = log.weight;
-        profile.measurements = { ...profile.measurements, ...log.measurements };
-        await this.saveProfile(profile);
-    }
   }
 
   getMessages(userId1: string, userId2: string): ChatMessage[] {
@@ -133,13 +125,14 @@ class StorageService {
     const profilesData = profilesSnapshot.val();
     const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
     
-    const profiles = Object.values(profilesData) as UserProfile[];
-    
-    return profiles.map(p => ({
+    const leaderboard = Object.values(profilesData).map((p: any) => ({
         ...p,
-        userName: usersData[p.userId]?.name || 'Usuário',
-        avatarUrl: usersData[p.userId]?.avatarUrl
-    })).sort((a, b) => (b.points || 0) - (a.points || 0));
+        userName: usersData[p.userId]?.name || 'Membro Treyo',
+        avatarUrl: usersData[p.userId]?.avatarUrl || null,
+        points: p.points || 0
+    }));
+    
+    return leaderboard.sort((a, b) => b.points - a.points);
   }
 
   async checkInReading(userId: string, book: string, chapter: number) {
@@ -149,37 +142,36 @@ class StorageService {
         profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '', readChapters: [] };
       }
       
-      if (!profile.readingStats.readChapters) profile.readingStats.readChapters = [];
-
+      let chapters = profile.readingStats.readChapters ? [...profile.readingStats.readChapters] : [];
       const chapterID = `${book}-${chapter}`;
-      const chapters = [...profile.readingStats.readChapters];
       const index = chapters.indexOf(chapterID);
 
       if (index !== -1) {
-        // Toggle off: Remover se já existir
+        // Toggle Off: Remove o capítulo
         chapters.splice(index, 1);
       } else {
-        // Toggle on: Adicionar
+        // Toggle On: Adiciona o capítulo
         chapters.push(chapterID);
       }
 
       profile.readingStats.readChapters = chapters;
       profile.readingStats.totalChaptersRead = chapters.length;
       
-      // Pontuação: Sempre baseada na contagem de capítulos únicos lidos
+      // Cálculo de pontos real baseado em capítulos únicos
       profile.points = chapters.length * 10;
       profile.level = Math.floor(profile.points / 500) + 1;
 
-      // Logica de ofensiva (Streak)
+      // Gestão de Streak
       const today = new Date().toISOString().split('T')[0];
-      if (profile.readingStats.lastReadDate !== today && index === -1) { // Só ganha streak se estiver marcando novo capítulo hoje
-        profile.readingStats.daysCompleted += 1;
-        profile.readingStats.streak += 1;
+      if (profile.readingStats.lastReadDate !== today && index === -1) {
+        profile.readingStats.streak = (profile.readingStats.streak || 0) + 1;
         profile.readingStats.lastReadDate = today;
       }
 
       await this.saveProfile(profile);
+      return profile;
     }
+    return null;
   }
 
   getBookReviews(): BookReview[] {
