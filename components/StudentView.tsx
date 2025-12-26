@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ChatMessage, ReadingPlan } from '../types';
+import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ChatMessage, ReadingPlan, BookReview } from '../types';
 import { db } from '../services/storage';
 import { 
     CheckCircle, Trophy, Activity, Dumbbell, Utensils,
@@ -9,6 +9,49 @@ import {
     MessageCircle, MessageSquare, Info, Star, Filter, SortAsc, BookPlus, Edit2, Medal, 
     Check, ChevronDown, TrendingUp, ImageIcon, Sunrise, Sun, Coffee, Soup, Moon, Ruler
 } from 'lucide-react';
+
+// Added BIBLE_STRUCTURE to define the number of chapters in each book of the Bible
+const BIBLE_STRUCTURE: Record<string, number> = {
+    'Gênesis': 50, 'Êxodo': 40, 'Levítico': 27, 'Números': 36, 'Deuteronômio': 34,
+    'Josué': 24, 'Juízes': 21, 'Rute': 4, '1 Samuel': 31, '2 Samuel': 24,
+    '1 Reis': 22, '2 Reis': 25, '1 Crônicas': 29, '2 Crônicas': 36, 'Esdras': 10,
+    'Neemias': 13, 'Ester': 10, 'Jó': 42, 'Salmos': 150, 'Provérbios': 31,
+    'Eclesiastes': 12, 'Cantares': 8, 'Isaías': 66, 'Jeremias': 52, 'Lamentações': 5,
+    'Ezequiel': 48, 'Daniel': 12, 'Oseias': 14, 'Joel': 3, 'Amós': 9,
+    'Obadias': 1, 'Jonas': 4, 'Miqueias': 7, 'Naum': 3, 'Habacuque': 3,
+    'Sofonias': 3, 'Ageu': 2, 'Zacarias': 14, 'Malaquias': 4,
+    'Mateus': 28, 'Marcos': 16, 'Lucas': 24, 'João': 21, 'Atos': 28,
+    'Romanos': 16, '1 Coríntios': 16, '2 Coríntios': 13, 'Gálatas': 6, 'Efésios': 6,
+    'Filipenses': 4, 'Colossenses': 4, '1 Tessalonicenses': 5, '2 Tessalonicenses': 3,
+    '1 Timóteo': 6, '2 Timóteo': 4, 'Tito': 3, 'Filemon': 1, 'Hebreus': 13,
+    'Tiago': 5, '1 Pedro': 5, '2 Pedro': 3, '1 João': 5, '2 João': 1, '3 João': 1,
+    'Judas': 1, 'Apocalipse': 22
+};
+
+// Added BIBLE_PLANS to provide reading plan options for the user
+const BIBLE_PLANS: ReadingPlan[] = [
+    {
+        id: 'anual-001',
+        name: 'Bíblia Toda em 1 Ano',
+        category: 'Anual',
+        description: 'Um plano clássico para ler toda a Bíblia seguindo a ordem canônica.',
+        books: Object.keys(BIBLE_STRUCTURE)
+    },
+    {
+        id: 'nt-001',
+        name: 'Novo Testamento em 90 Dias',
+        category: 'NT',
+        description: 'Foco total nos evangelhos e cartas apostólicas.',
+        books: ['Mateus', 'Marcos', 'Lucas', 'João', 'Atos', 'Romanos', '1 Coríntios', '2 Coríntios', 'Gálatas', 'Efésios', 'Filipenses', 'Colossenses', '1 Tessalonicenses', '2 Tessalonicenses', '1 Timóteo', '2 Timóteo', 'Tito', 'Filemon', 'Hebreus', 'Tiago', '1 Pedro', '2 Pedro', '1 João', '2 João', '3 João', 'Judas', 'Apocalipse']
+    },
+    {
+        id: 'sabedoria-001',
+        name: 'Livros de Sabedoria',
+        category: 'Sabedoria',
+        description: 'Uma jornada por Salmos, Provérbios e Eclesiastes.',
+        books: ['Jó', 'Salmos', 'Provérbios', 'Eclesiastes', 'Cantares']
+    }
+];
 
 interface StudentViewProps {
     activeTab: string;
@@ -124,6 +167,174 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 
 // --- SUB-VIEWS ---
 
+const LibraryView = ({ user, profile, onUpdate }: any) => {
+    const [view, setView] = useState<'shelf' | 'community' | 'add'>('shelf');
+    const [sortBy, setSortBy] = useState<'title' | 'author' | 'category'>('title');
+    const [filterCategory, setFilterCategory] = useState<string>('all');
+    
+    const categories = ['Espiritualidade', 'Desenvolvimento Pessoal', 'Saúde & Fitness', 'Biografia', 'Ficção', 'Negócios', 'Outros'];
+
+    const [newBook, setNewBook] = useState({ 
+        id: '',
+        title: '', 
+        author: '', 
+        review: '', 
+        category: categories[0],
+        rating: 5 
+    });
+
+    const reviews = db.getBookReviews();
+
+    const filteredReviews = reviews
+        .filter(r => view === 'shelf' ? r.userId === user.id : true)
+        .filter(r => {
+            if (filterCategory === 'all') return true;
+            return (r.category || 'Outros') === filterCategory;
+        })
+        .sort((a, b) => {
+            if (sortBy === 'title') return a.title.localeCompare(b.title);
+            if (sortBy === 'author') return (a.author || '').localeCompare(b.author || '');
+            if (sortBy === 'category') return (a.category || 'Outros').localeCompare(b.category || 'Outros');
+            return 0;
+        });
+
+    const handleSaveReview = () => {
+        if (!newBook.title || !newBook.review) return alert('Título e resenha são obrigatórios.');
+        db.saveBookReview({
+            id: newBook.id || Date.now().toString(),
+            userId: user.id,
+            userName: user.name,
+            title: newBook.title,
+            author: newBook.author,
+            category: newBook.category || 'Outros',
+            review: newBook.review,
+            rating: newBook.rating,
+            timestamp: new Date().toISOString(),
+            comments: []
+        });
+        setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 });
+        setView('shelf');
+        onUpdate();
+    };
+
+    const handleEditBook = (book: BookReview) => {
+        setNewBook({
+            id: book.id,
+            title: book.title,
+            author: book.author || '',
+            review: book.review,
+            category: book.category || 'Outros',
+            rating: book.rating || 5
+        });
+        setView('add');
+    };
+
+    const handleAddToShelf = (book: BookReview) => {
+        db.saveBookReview({
+            ...book,
+            id: `clone-${Date.now()}`,
+            userId: user.id,
+            userName: user.name,
+            timestamp: new Date().toISOString(),
+            comments: []
+        });
+        alert('Livro adicionado à sua estante!');
+        onUpdate();
+    };
+
+    return (
+        <div className="space-y-8 animate-fade-in">
+            <div className="flex justify-between items-center">
+                <h2 className="text-4xl font-black text-slate-900">Biblioteca</h2>
+                <button onClick={() => { setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 }); setView('add'); }} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 hover:scale-105 transition-all shadow-xl">
+                    <Plus className="w-5 h-5" /> Novo Livro
+                </button>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 justify-between">
+                <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 w-fit">
+                    <button onClick={() => setView('shelf')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition-all ${view === 'shelf' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Minha Estante</button>
+                    <button onClick={() => setView('community')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition-all ${view === 'community' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Comunidade</button>
+                </div>
+
+                <div className="flex gap-3">
+                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                        <Filter className="w-4 h-4 text-slate-400" />
+                        <select className="bg-transparent text-xs font-black outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                            <option value="all">Todas Categorias</option>
+                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                        <SortAsc className="w-4 h-4 text-slate-400" />
+                        <select className="bg-transparent text-xs font-black outline-none" value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
+                            <option value="title">Título</option>
+                            <option value="author">Autor</option>
+                            <option value="category">Categoria</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {view === 'add' ? (
+                <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl space-y-6 animate-slide-up">
+                    <div className="flex justify-between items-center"><h3 className="text-2xl font-black">{newBook.id ? 'Editar Livro' : 'Adicionar à Estante'}</h3><button onClick={() => setView('shelf')}><X /></button></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                            <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
+                            <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
+                            <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.category} onChange={e => setNewBook({...newBook, category: e.target.value})}>
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <textarea placeholder="Sua resenha ou notas sobre o livro..." className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-medium h-full min-h-[150px]" value={newBook.review} onChange={e => setNewBook({...newBook, review: e.target.value})} />
+                    </div>
+                    <button onClick={handleSaveReview} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-indigo-700 transition-all">
+                        {newBook.id ? 'Salvar Alterações' : 'Publicar na Minha Estante'}
+                    </button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {filteredReviews.length === 0 ? (
+                        <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
+                            <p className="text-slate-400 font-bold italic">Nenhum livro encontrado nesta seção.</p>
+                        </div>
+                    ) : filteredReviews.map(r => (
+                        <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group relative">
+                            <div className="mb-4 flex justify-between items-start">
+                                <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{r.category || 'Outros'}</span>
+                                <div className="flex text-amber-400">{Array(5).fill(0).map((_, i) => <Star key={i} className={`w-3 h-3 ${i < r.rating ? 'fill-current' : 'text-slate-200'}`}/>)}</div>
+                            </div>
+                            <h4 className="text-xl font-black text-slate-900 leading-tight mb-1">{r.title}</h4>
+                            <p className="text-xs font-bold text-slate-400 uppercase mb-4">{r.author || 'Autor desconhecido'}</p>
+                            <p className="text-slate-600 text-sm italic line-clamp-4 flex-1">"{r.review}"</p>
+                            
+                            <div className="mt-8 pt-6 border-t border-slate-50 flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-indigo-600">{r.userName.charAt(0)}</div>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{r.userName}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    {r.userId === user.id && (
+                                        <button onClick={() => handleEditBook(r)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm">
+                                            <Edit2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                    {view === 'community' && r.userId !== user.id && (
+                                        <button onClick={() => handleAddToShelf(r)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
+                                            <BookPlus className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
     const [isAdding, setIsAdding] = useState(false);
     const [newLog, setNewLog] = useState({
@@ -181,7 +392,6 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                        {/* Foto de Progresso */}
                         <div className="space-y-6">
                             <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Foto da Evolução</label>
                             <div 
@@ -200,37 +410,30 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                                 )}
                                 <input ref={photoInputRef} type="file" className="hidden" accept="image/*" onChange={handlePhotoChange} />
                             </div>
-                            <p className="text-[10px] text-slate-400 font-medium text-center italic">Dica: Tente tirar a foto no mesmo lugar e iluminação para comparar melhor.</p>
                         </div>
 
-                        {/* Dados e Medidas */}
                         <div className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="col-span-full">
-                                    <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3 flex items-center gap-2"><Scale className="w-4 h-4 text-indigo-500" /> Peso Atual (kg)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-sm"
-                                        value={newLog.weight}
-                                        onChange={e => setNewLog({ ...newLog, weight: parseFloat(e.target.value) })}
-                                    />
-                                </div>
+                            <div>
+                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3 flex items-center gap-2"><Scale className="w-4 h-4 text-indigo-500" /> Peso Atual (kg)</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-sm"
+                                    value={newLog.weight}
+                                    onChange={e => setNewLog({ ...newLog, weight: parseFloat(e.target.value) })}
+                                />
+                            </div>
 
-                                <div className="space-y-6 col-span-full">
-                                    <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Ruler className="w-4 h-4 text-emerald-500" /> Circunferências (cm)</h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <MeasurementInput label="Cintura" value={newLog.measurements.waist} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, waist: v } })} />
-                                        <MeasurementInput label="Quadril" value={newLog.measurements.hips} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, hips: v } })} />
-                                        <MeasurementInput label="Braço" value={newLog.measurements.arm} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, arm: v } })} />
-                                        <MeasurementInput label="Perna" value={newLog.measurements.leg} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, leg: v } })} />
-                                    </div>
-                                </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <MeasurementInput label="Cintura" value={newLog.measurements.waist} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, waist: v } })} />
+                                <MeasurementInput label="Quadril" value={newLog.measurements.hips} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, hips: v } })} />
+                                <MeasurementInput label="Braço" value={newLog.measurements.arm} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, arm: v } })} />
+                                <MeasurementInput label="Perna" value={newLog.measurements.leg} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, leg: v } })} />
                             </div>
 
                             <div>
                                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3">Relato de Mudança</label>
                                 <textarea 
-                                    placeholder="Ex: Senti que minha calça jeans está mais folgada hoje. Dormi melhor e tive mais disposição no treino."
+                                    placeholder="Como você se sente hoje?"
                                     className="w-full h-32 p-5 bg-slate-50 rounded-2xl font-medium outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all resize-none shadow-sm"
                                     value={newLog.notes}
                                     onChange={e => setNewLog({ ...newLog, notes: e.target.value })}
@@ -250,8 +453,8 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                             <TrendingUp className="w-8 h-8" />
                         </div>
                         <div>
-                            <h2 className="text-2xl font-black text-slate-900">Histórico de Transformação</h2>
-                            <p className="text-slate-400 font-medium">Veja o quanto você já caminhou. O esforço recompensa.</p>
+                            <h2 className="text-2xl font-black text-slate-900">Linha do Tempo</h2>
+                            <p className="text-slate-400 font-medium">Veja visualmente sua transformação física.</p>
                         </div>
                     </div>
 
@@ -259,51 +462,37 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                         {progress.length === 0 ? (
                             <div className="col-span-full py-24 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
                                 <Camera className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                                <p className="text-slate-400 font-bold italic">Sua linha do tempo está esperando. Registre sua primeira evolução!</p>
+                                <p className="text-slate-400 font-bold italic">Nenhum registro de evolução ainda.</p>
                             </div>
                         ) : progress.map((log: ProgressLog) => (
                             <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all">
-                                {log.photoUrl ? (
+                                {log.photoUrl && (
                                     <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100 relative">
                                         <img src={log.photoUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Progresso" />
                                         <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md text-white px-3 py-1 rounded-full text-[10px] font-black">
                                             {new Date(log.date).toLocaleDateString('pt-BR')}
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="aspect-[4/3] w-full bg-slate-50 flex items-center justify-center text-slate-200">
-                                        <ImageIcon className="w-12 h-12" />
-                                    </div>
                                 )}
                                 <div className="p-8 space-y-6">
                                     <div className="flex justify-between items-end border-b border-slate-50 pb-4">
                                         <div>
-                                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Peso Registrado</p>
-                                            <p className="text-3xl font-black text-slate-900">{log.weight} <span className="text-sm font-bold text-slate-300">kg</span></p>
+                                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Peso</p>
+                                            <p className="text-3xl font-black text-slate-900">{log.weight} kg</p>
                                         </div>
-                                        <div className="text-right">
-                                             <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Status</p>
-                                             <CheckCircle className="w-6 h-6 text-emerald-400 ml-auto" />
-                                        </div>
+                                        <Scale className="w-8 h-8 text-indigo-100" />
                                     </div>
-
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
-                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter mb-1">Cintura</p>
-                                            <p className="font-black text-slate-700 text-lg">{log.measurements?.waist || '-'} <span className="text-[10px]">cm</span></p>
+                                        <div className="bg-slate-50 p-3 rounded-2xl">
+                                            <p className="text-[8px] font-black uppercase text-slate-400">Cintura</p>
+                                            <p className="font-black text-slate-700">{log.measurements?.waist || '-'} cm</p>
                                         </div>
-                                        <div className="bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
-                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter mb-1">Quadril</p>
-                                            <p className="font-black text-slate-700 text-lg">{log.measurements?.hips || '-'} <span className="text-[10px]">cm</span></p>
+                                        <div className="bg-slate-50 p-3 rounded-2xl">
+                                            <p className="text-[8px] font-black uppercase text-slate-400">Quadril</p>
+                                            <p className="font-black text-slate-700">{log.measurements?.hips || '-'} cm</p>
                                         </div>
                                     </div>
-
-                                    {log.notes && (
-                                        <div className="relative pt-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-50">
-                                            <Quote className="absolute -top-1 -right-1 w-6 h-6 text-indigo-100" />
-                                            <p className="text-xs text-slate-600 font-medium italic relative z-10 line-clamp-4 leading-relaxed">"{log.notes}"</p>
-                                        </div>
-                                    )}
+                                    {log.notes && <p className="text-xs text-slate-500 italic">"{log.notes}"</p>}
                                 </div>
                             </div>
                         ))}
@@ -348,37 +537,104 @@ const ChatView = ({ user, trainer, onMessageSent }: any) => {
                 ))}
             </div>
             <div className="p-8 flex gap-4">
-                <input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Envie uma dúvida para o moderador..." value={input} onChange={e => setInput(e.target.value)} />
+                <input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Escreva para o moderador..." value={input} onChange={e => setInput(e.target.value)} />
                 <button onClick={() => { if(input && trainer) { db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all"><Send /></button>
             </div>
         </div>
     );
 };
 
-const BIBLE_STRUCTURE: Record<string, number> = {
-    'Gênesis': 50, 'Êxodo': 40, 'Levítico': 27, 'Números': 36, 'Deuteronômio': 34,
-    'Josué': 24, 'Juízes': 21, 'Rute': 4, '1 Samuel': 31, '2 Samuel': 24,
-    '1 Reis': 22, '2 Reis': 25, '1 Crônicas': 29, '2 Crônicas': 36, 'Esdras': 10,
-    'Neemias': 13, 'Ester': 10, 'Jó': 42, 'Salmos': 150, 'Provérbios': 31,
-    'Eclesiastes': 12, 'Cantares': 8, 'Isaías': 66, 'Jeremias': 52, 'Lamentações': 5,
-    'Ezequiel': 48, 'Daniel': 12, 'Oséias': 14, 'Joel': 3, 'Amós': 9,
-    'Obadias': 1, 'Jonas': 4, 'Miquéias': 7, 'Naum': 3, 'Habacuque': 3,
-    'Sofonias': 3, 'Ageu': 2, 'Zacarias': 14, 'Malaquias': 4,
-    'Mateus': 28, 'Marcos': 16, 'Lucas': 24, 'João': 21, 'Atos': 28,
-    'Romanos': 16, '1 Coríntios': 16, '2 Coríntios': 13, 'Gálatas': 6, 'Efésios': 6,
-    'Filipenses': 4, 'Colossenses': 4, '1 Tessalonicenses': 5, '2 Tessalonicenses': 3,
-    '1 Timóteo': 6, '2 Timóteo': 4, 'Tito': 3, 'Filemon': 1, 'Hebreus': 13,
-    'Tiago': 5, '1 Pedro': 5, '2 Pedro': 3, '1 João': 5, '2 João': 1,
-    '3 João': 1, 'Judas': 1, 'Apocalipse': 22
+const WorkoutView = ({ workouts }: any) => {
+    const [activeSplit, setActiveSplit] = useState(workouts[0]?.id || '');
+    const currentWorkout = workouts.find((w: any) => w.id === activeSplit) || workouts[0];
+    if (!currentWorkout) return <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100"><Dumbbell className="w-16 h-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-400 font-bold">Sem treinos prescritos.</p></div>;
+    return (
+        <div className="space-y-6">
+            <h2 className="text-4xl font-black text-slate-900 mb-8">Meus Treinos</h2>
+            <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
+                {workouts.map((w: any) => (
+                    <button key={w.id} onClick={() => setActiveSplit(w.id)} className={`px-8 py-4 rounded-2xl font-black border-2 ${activeSplit === w.id ? 'bg-slate-900 border-slate-900 text-white shadow-xl' : 'bg-white text-slate-400 border-slate-50'}`}>{w.split || 'Treino'}</button>
+                ))}
+            </div>
+            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
+                <h3 className="text-3xl font-black text-slate-900 mb-10">{currentWorkout.title}</h3>
+                <div className="space-y-4">
+                    {currentWorkout.exercises.map((ex: any, idx: number) => (
+                        <div key={ex.id} className="p-6 bg-slate-50 rounded-[2rem] flex items-center justify-between group">
+                            <div className="flex items-center gap-6"><div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center font-black text-slate-300">{idx + 1}</div><div><p className="font-black text-lg text-slate-900">{ex.name}</p><p className="text-xs text-slate-400 font-black uppercase">{ex.sets} séries • {ex.reps || ex.distance} • {ex.load || ex.pace}</p></div></div>
+                            <button className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-200 hover:text-emerald-500 transition-all"><CheckCircle className="w-6 h-6" /></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
 };
 
-const BIBLE_PLANS: ReadingPlan[] = [
-    { id: 'anual', name: 'Plano Anual', category: 'Anual', description: 'Leia toda a Bíblia em um ano na ordem canônica.', books: Object.keys(BIBLE_STRUCTURE) },
-    { id: 'cronologico', name: 'Cronológico', category: 'Cronológico', description: 'A história na ordem em que aconteceu.', books: ['Gênesis', 'Jó', 'Êxodo', 'Levítico', 'Números', 'Deuteronômio'] },
-    { id: 'nt', name: 'Novo Testamento', category: 'NT', description: 'Foco total na vida de Jesus e na Igreja Primitiva.', books: Object.keys(BIBLE_STRUCTURE).slice(39) },
-    { id: 'sabedoria', name: 'Salmos & Provérbios', category: 'Sabedoria', description: 'Um capítulo de Salmos e Provérbios por dia.', books: ['Salmos', 'Provérbios'] },
-    { id: 'essencial', name: 'Essenciais da Fé', category: 'Temático', description: 'Passagens chave sobre a caminhada cristã.', books: ['João', 'Romanos', 'Efésios'] }
-];
+const DietView = ({ diet }: any) => {
+    if (!diet) return <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100"><Utensils className="w-16 h-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-400 font-bold">Plano alimentar em preparo.</p></div>;
+    const mealList = [{ id: 'breakfast', label: 'Café da Manhã', icon: Sunrise, color: 'text-amber-500' }, { id: 'lunch', label: 'Almoço', icon: Sun, color: 'text-indigo-500' }, { id: 'snack', label: 'Café da Tarde', icon: Coffee, color: 'text-orange-500' }, { id: 'dinner', label: 'Jantar', icon: Soup, color: 'text-rose-500' }, { id: 'supper', label: 'Ceia', icon: Moon, color: 'text-slate-900' }];
+    return (
+        <div className="space-y-10 animate-fade-in">
+            <h2 className="text-4xl font-black text-slate-900">Alimentação</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <MacroCard label="Calorias" value={diet.macros.calories} unit="kcal" color="bg-indigo-500" />
+                <MacroCard label="Proteínas" value={diet.macros.protein} unit="g" color="bg-rose-500" />
+                <MacroCard label="Carbos" value={diet.macros.carbs} unit="g" color="bg-amber-500" />
+                <MacroCard label="Gorduras" value={diet.macros.fats} unit="g" color="bg-emerald-500" />
+            </div>
+            <div className="space-y-6">
+                {mealList.map(m => {
+                    const content = diet.meals?.[m.id as keyof typeof diet.meals];
+                    if (!content) return null;
+                    return (
+                        <div key={m.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-4 md:w-56 shrink-0"><div className={`p-4 rounded-2xl bg-slate-50 ${m.color}`}><m.icon className="w-7 h-7" /></div><div><h4 className="font-black text-slate-900 text-lg leading-tight">{m.label}</h4><p className="text-[10px] font-black uppercase text-slate-300">Prescrito</p></div></div>
+                            <div className="flex-1 bg-slate-50/50 p-6 rounded-3xl border border-slate-50"><p className="text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{content}</p></div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const QuickActionBtn = ({ icon: Icon, label, onClick, color }: any) => (
+    <button onClick={onClick} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] group hover:bg-slate-900 transition-all border border-transparent shadow-sm hover:translate-y-[-4px]">
+        <div className="flex items-center gap-4"><div className={`p-4 bg-white rounded-2xl shadow-sm ${color} group-hover:bg-white/10 transition-all`}><Icon className="w-6 h-6" /></div><span className="font-black text-sm group-hover:text-white">{label}</span></div>
+        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-white transition-all" />
+    </button>
+);
+
+const MacroCard = ({ label, value, unit, color }: any) => (
+    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:translate-y-[-4px] group">
+        <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">{label}</p>
+        <p className="text-3xl font-black text-slate-900">{value} <span className="text-xs font-bold text-slate-300">{unit}</span></p>
+        <div className={`w-full h-1.5 ${color} rounded-full mt-4 opacity-10`}></div>
+    </div>
+);
+
+const Card = ({ label, value, icon: Icon, color }: any) => (
+    <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm flex items-center gap-6 group hover:shadow-md transition-all">
+        <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}><Icon className="w-6 h-6" /></div>
+        <div><p className="text-[10px] font-black uppercase text-slate-400 leading-tight mb-1">{label}</p><p className="text-xl font-black text-slate-900">{value}</p></div>
+    </div>
+);
+
+const CommunityView = ({ posts, user, onUpdate }: any) => {
+    const [input, setInput] = useState('');
+    return (
+        <div className="flex flex-col h-[75vh] space-y-6">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                {posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] shadow-sm ${p.userId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}`}><p className="text-[9px] font-black opacity-40 uppercase mb-1">{p.userName}</p><p className="font-medium">{p.content}</p></div></div>)}
+            </div>
+            <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-xl flex gap-4">
+                <input className="flex-1 bg-slate-50 px-8 py-5 rounded-[2rem] outline-none font-bold" placeholder="Compartilhe seu progresso..." value={input} onChange={e => setInput(e.target.value)} />
+                <button onClick={() => { if(input) { db.addCommunityPost({ id: Date.now().toString(), userId: user.id, userName: user.name, content: input, timestamp: new Date().toISOString() }); setInput(''); onUpdate(); } }} className="bg-slate-900 text-white p-5 rounded-[1.8rem]"><Send /></button>
+            </div>
+        </div>
+    );
+};
 
 const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }: any) => {
     const [view, setView] = useState<'plans' | 'active'>('plans');
@@ -545,132 +801,3 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
         </div>
     );
 };
-
-const WorkoutView = ({ workouts }: any) => {
-    const [activeSplit, setActiveSplit] = useState(workouts[0]?.id || '');
-    const currentWorkout = workouts.find((w: any) => w.id === activeSplit) || workouts[0];
-    if (!currentWorkout) return <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100"><Dumbbell className="w-16 h-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-400 font-bold">Sem treinos prescritos.</p></div>;
-    return (
-        <div className="space-y-6">
-            <h2 className="text-4xl font-black text-slate-900 mb-8">Meus Treinos</h2>
-            <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
-                {workouts.map((w: any) => (
-                    <button key={w.id} onClick={() => setActiveSplit(w.id)} className={`px-8 py-4 rounded-2xl font-black border-2 ${activeSplit === w.id ? 'bg-slate-900 border-slate-900 text-white shadow-xl' : 'bg-white text-slate-400 border-slate-50'}`}>{w.split || 'Treino'}</button>
-                ))}
-            </div>
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
-                <h3 className="text-3xl font-black text-slate-900 mb-10">{currentWorkout.title}</h3>
-                <div className="space-y-4">
-                    {currentWorkout.exercises.map((ex: any, idx: number) => (
-                        <div key={ex.id} className="p-6 bg-slate-50 rounded-[2rem] flex items-center justify-between group">
-                            <div className="flex items-center gap-6"><div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center font-black text-slate-300">{idx + 1}</div><div><p className="font-black text-lg text-slate-900">{ex.name}</p><p className="text-xs text-slate-400 font-black uppercase">{ex.sets} séries • {ex.reps || ex.distance} • {ex.load || ex.pace}</p></div></div>
-                            <button className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-200 hover:text-emerald-500 transition-all"><CheckCircle className="w-6 h-6" /></button>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const DietView = ({ diet }: any) => {
-    if (!diet) return <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100"><Utensils className="w-16 h-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-400 font-bold">Plano alimentar em preparo.</p></div>;
-    const mealList = [{ id: 'breakfast', label: 'Café da Manhã', icon: Sunrise, color: 'text-amber-500' }, { id: 'lunch', label: 'Almoço', icon: Sun, color: 'text-indigo-500' }, { id: 'snack', label: 'Café da Tarde', icon: Coffee, color: 'text-orange-500' }, { id: 'dinner', label: 'Jantar', icon: Soup, color: 'text-rose-500' }, { id: 'supper', label: 'Ceia', icon: Moon, color: 'text-slate-900' }];
-    return (
-        <div className="space-y-10 animate-fade-in">
-            <h2 className="text-4xl font-black text-slate-900">Alimentação</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <MacroCard label="Calorias" value={diet.macros.calories} unit="kcal" color="bg-indigo-500" />
-                <MacroCard label="Proteínas" value={diet.macros.protein} unit="g" color="bg-rose-500" />
-                <MacroCard label="Carbos" value={diet.macros.carbs} unit="g" color="bg-amber-500" />
-                <MacroCard label="Gorduras" value={diet.macros.fats} unit="g" color="bg-emerald-500" />
-            </div>
-            <div className="space-y-6">
-                {mealList.map(m => {
-                    const content = diet.meals?.[m.id as keyof typeof diet.meals];
-                    if (!content) return null;
-                    return (
-                        <div key={m.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6 hover:shadow-md transition-all">
-                            <div className="flex items-center gap-4 md:w-56 shrink-0"><div className={`p-4 rounded-2xl bg-slate-50 ${m.color}`}><m.icon className="w-7 h-7" /></div><div><h4 className="font-black text-slate-900 text-lg leading-tight">{m.label}</h4><p className="text-[10px] font-black uppercase text-slate-300">Prescrito</p></div></div>
-                            <div className="flex-1 bg-slate-50/50 p-6 rounded-3xl border border-slate-50"><p className="text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{content}</p></div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-};
-
-const LibraryView = ({ user, profile, onUpdate }: any) => {
-    const [view, setView] = useState<'shelf' | 'community' | 'add'>('shelf');
-    const categories = ['Espiritualidade', 'Desenvolvimento Pessoal', 'Saúde & Fitness', 'Biografia', 'Ficção', 'Negócios', 'Outros'];
-    const [newBook, setNewBook] = useState({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 });
-    const reviews = db.getBookReviews();
-    const filteredReviews = reviews.filter(r => view === 'shelf' ? r.userId === user.id : true);
-    return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center"><h2 className="text-4xl font-black text-slate-900">Biblioteca</h2><button onClick={() => { setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 }); setView('add'); }} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 hover:scale-105 transition-all shadow-xl"><Plus className="w-5 h-5" /> Novo Livro</button></div>
-            {view === 'add' ? (
-                <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl space-y-6">
-                    <div className="flex justify-between items-center"><h3 className="text-2xl font-black">Adicionar à Estante</h3><button onClick={() => setView('shelf')}><X /></button></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                            <input placeholder="Título" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
-                            <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
-                        </div>
-                        <textarea placeholder="Sua resenha..." className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-medium h-full min-h-[150px]" value={newBook.review} onChange={e => setNewBook({...newBook, review: e.target.value})} />
-                    </div>
-                    <button onClick={() => { db.saveBookReview({...newBook, id: Date.now().toString(), userId: user.id, userName: user.name, timestamp: new Date().toISOString(), comments: []}); setView('shelf'); onUpdate(); }} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl">Publicar Livro</button>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {filteredReviews.map(r => (
-                        <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group">
-                            <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase w-fit mb-4">{r.category}</span>
-                            <h4 className="text-xl font-black text-slate-900 mb-1">{r.title}</h4>
-                            <p className="text-xs font-bold text-slate-400 mb-4">{r.author}</p>
-                            <p className="text-slate-600 text-sm italic line-clamp-4 flex-1">"{r.review}"</p>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-const CommunityView = ({ posts, user, onUpdate }: any) => {
-    const [input, setInput] = useState('');
-    return (
-        <div className="flex flex-col h-[75vh] space-y-6">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                {posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] shadow-sm ${p.userId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}`}><p className="text-[9px] font-black opacity-40 uppercase mb-1">{p.userName}</p><p className="font-medium">{p.content}</p></div></div>)}
-            </div>
-            <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-xl flex gap-4">
-                <input className="flex-1 bg-slate-50 px-8 py-5 rounded-[2rem] outline-none font-bold" placeholder="Compartilhe seu progresso..." value={input} onChange={e => setInput(e.target.value)} />
-                <button onClick={() => { if(input) { db.addCommunityPost({ id: Date.now().toString(), userId: user.id, userName: user.name, content: input, timestamp: new Date().toISOString() }); setInput(''); onUpdate(); } }} className="bg-slate-900 text-white p-5 rounded-[1.8rem]"><Send /></button>
-            </div>
-        </div>
-    );
-};
-
-const QuickActionBtn = ({ icon: Icon, label, onClick, color }: any) => (
-    <button onClick={onClick} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] group hover:bg-slate-900 transition-all border border-transparent shadow-sm hover:translate-y-[-4px]">
-        <div className="flex items-center gap-4"><div className={`p-4 bg-white rounded-2xl shadow-sm ${color} group-hover:bg-white/10 transition-all`}><Icon className="w-6 h-6" /></div><span className="font-black text-sm group-hover:text-white">{label}</span></div>
-        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-white transition-all" />
-    </button>
-);
-
-const MacroCard = ({ label, value, unit, color }: any) => (
-    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:translate-y-[-4px] group">
-        <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">{label}</p>
-        <p className="text-3xl font-black text-slate-900">{value} <span className="text-xs font-bold text-slate-300">{unit}</span></p>
-        <div className={`w-full h-1.5 ${color} rounded-full mt-4 opacity-10`}></div>
-    </div>
-);
-
-const Card = ({ label, value, icon: Icon, color }: any) => (
-    <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm flex items-center gap-6 group hover:shadow-md transition-all">
-        <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}><Icon className="w-6 h-6" /></div>
-        <div><p className="text-[10px] font-black uppercase text-slate-400 leading-tight mb-1">{label}</p><p className="text-xl font-black text-slate-900">{value}</p></div>
-    </div>
-);

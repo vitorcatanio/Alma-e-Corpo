@@ -69,11 +69,9 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'messages', label: 'Mensagens', icon: MessageCircle },
   ];
 
-  // Filtra itens do menu baseando-se no perfil e escolhas do onboarding
   const filteredItems = role === UserRole.STUDENT 
     ? studentNavItems.filter(item => {
         if (item.needsFitness) {
-            // Só mostra a aba de Evolução se o usuário marcou foco físico (wantsWeightLoss)
             return profile?.onboardingChoices?.wantsWeightLoss === true;
         }
         return true;
@@ -131,7 +129,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
           </div>
           
-          <button onClick={() => { setIsProfileModalOpen(true); setIsMobileMenuOpen(false); }} className="mb-8 p-1 bg-slate-50 rounded-2xl border border-slate-100 w-full hover:border-indigo-200 hover:shadow-md transition-all group text-left relative">
+          <button onClick={() => { setIsProfileModalOpen(true); setIsMobileMenuOpen(false); }} className="mb-8 p-1 bg-slate-50 rounded-2xl border border-slate-100 w-full hover:border-indigo-200 hover:shadow-md transition-all group text-left relative text-left">
              <div className="flex items-center gap-3 p-3">
                 <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg shadow-sm overflow-hidden border-2 border-white">
                     {user.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : user.name.charAt(0)}
