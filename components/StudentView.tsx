@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ActivityLog, ChatMessage, Badge, SportType, SpiritualPost, Exercise, CalendarEvent, SpiritualComment, BookReview, WishlistBook, LibraryComment, CommunityPost } from '../types';
+import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ActivityLog, ChatMessage, Badge, SportType, SpiritualPost, Exercise, CalendarEvent, SpiritualComment, BookReview, WishlistBook, LibraryComment, CommunityPost, ReadingPlan } from '../types';
 import { db } from '../services/storage';
 import { 
     CheckCircle, Trophy, Activity, Dumbbell, Utensils, Calendar as CalendarIcon, 
     Flame, Timer, Send, Scale, Ruler, Camera, Plus, BookOpen, 
     Quote, Sparkles, ChevronRight, Layers, X, Save, Loader2, ArrowLeft,
     MessageSquare, Trash2, BookmarkPlus, BookMarked, Users, History, Info,
-    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus, Edit2
+    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus, Edit2, Medal, Check, ChevronDown
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -157,6 +157,207 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 };
 
 // --- SUB-VIEWS DETALHADAS ---
+
+const BIBLE_STRUCTURE: Record<string, number> = {
+    'Gênesis': 50, 'Êxodo': 40, 'Levítico': 27, 'Números': 36, 'Deuteronômio': 34,
+    'Josué': 24, 'Juízes': 21, 'Rute': 4, '1 Samuel': 31, '2 Samuel': 24,
+    '1 Reis': 22, '2 Reis': 25, '1 Crônicas': 29, '2 Crônicas': 36, 'Esdras': 10,
+    'Neemias': 13, 'Ester': 10, 'Jó': 42, 'Salmos': 150, 'Provérbios': 31,
+    'Eclesiastes': 12, 'Cantares': 8, 'Isaías': 66, 'Jeremias': 52, 'Lamentações': 5,
+    'Ezequiel': 48, 'Daniel': 12, 'Oséias': 14, 'Joel': 3, 'Amós': 9,
+    'Obadias': 1, 'Jonas': 4, 'Miquéias': 7, 'Naum': 3, 'Habacuque': 3,
+    'Sofonias': 3, 'Ageu': 2, 'Zacarias': 14, 'Malaquias': 4,
+    'Mateus': 28, 'Marcos': 16, 'Lucas': 24, 'João': 21, 'Atos': 28,
+    'Romanos': 16, '1 Coríntios': 16, '2 Coríntios': 13, 'Gálatas': 6, 'Efésios': 6,
+    'Filipenses': 4, 'Colossenses': 4, '1 Tessalonicenses': 5, '2 Tessalonicenses': 3,
+    '1 Timóteo': 6, '2 Timóteo': 4, 'Tito': 3, 'Filemon': 1, 'Hebreus': 13,
+    'Tiago': 5, '1 Pedro': 5, '2 Pedro': 3, '1 João': 5, '2 João': 1,
+    '3 João': 1, 'Judas': 1, 'Apocalipse': 22
+};
+
+const BIBLE_PLANS: ReadingPlan[] = [
+    { id: 'anual', name: 'Plano Anual', category: 'Anual', description: 'Leia toda a Bíblia em um ano na ordem canônica.', books: Object.keys(BIBLE_STRUCTURE) },
+    { id: 'cronologico', name: 'Cronológico', category: 'Cronológico', description: 'A história na ordem em que aconteceu.', books: ['Gênesis', 'Jó', 'Êxodo', 'Levítico', 'Números', 'Deuteronômio'] },
+    { id: 'nt', name: 'Novo Testamento', category: 'NT', description: 'Foco total na vida de Jesus e na Igreja Primitiva.', books: Object.keys(BIBLE_STRUCTURE).slice(39) },
+    { id: 'sabedoria', name: 'Salmos & Provérbios', category: 'Sabedoria', description: 'Um capítulo de Salmos e Provérbios por dia.', books: ['Salmos', 'Provérbios'] },
+    { id: 'essencial', name: 'Essenciais da Fé', category: 'Temático', description: 'Passagens chave sobre a caminhada cristã.', books: ['João', 'Romanos', 'Efésios'] }
+];
+
+const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
+    const [view, setView] = useState<'plans' | 'active'>('plans');
+    const [selectedPlan, setSelectedPlan] = useState<ReadingPlan | null>(null);
+    const [expandedBook, setExpandedBook] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (profile.readingStats?.activePlanId) {
+            const plan = BIBLE_PLANS.find(p => p.id === profile.readingStats.activePlanId);
+            if (plan) setSelectedPlan(plan);
+        }
+    }, [profile.readingStats?.activePlanId]);
+
+    const handleStartPlan = (plan: ReadingPlan) => {
+        const updatedProfile = { ...profile, readingStats: { ...profile.readingStats, activePlanId: plan.id } };
+        db.saveProfile(updatedProfile);
+        setSelectedPlan(plan);
+        setView('active');
+        onUpdate();
+    };
+
+    const toggleChapter = async (book: string, chapter: number) => {
+        await db.checkInReading(user.id, book, chapter);
+        onUpdate();
+    };
+
+    return (
+        <div className="space-y-10 animate-fade-in pb-20">
+            <div className="flex flex-col lg:flex-row gap-10">
+                
+                {/* Coluna Principal: Leitura */}
+                <div className="flex-1 space-y-8">
+                    <div className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl">
+                        <div className="relative z-10">
+                            <h2 className="text-3xl font-black mb-2">Ápice Espiritual</h2>
+                            <p className="text-slate-400 font-medium">Cada capítulo lido é um degrau na sua evolução.</p>
+                            
+                            <div className="mt-8 flex items-center gap-6">
+                                <div className="w-24 h-24 rounded-full border-4 border-amber-400/20 flex items-center justify-center relative">
+                                    <div className="absolute inset-0 rounded-full border-4 border-amber-400 border-t-transparent animate-spin-slow"></div>
+                                    <span className="text-2xl font-black text-amber-400">{profile.level}</span>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Pontos Totais</p>
+                                    <p className="text-4xl font-black text-white">{profile.points || 0} <span className="text-xs text-slate-500">PTS</span></p>
+                                </div>
+                            </div>
+                        </div>
+                        <BookOpen className="absolute right-[-40px] bottom-[-40px] w-64 h-64 text-white/5 -rotate-12" />
+                    </div>
+
+                    {selectedPlan ? (
+                        <div className="space-y-6">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-900">{selectedPlan.name}</h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedPlan.category}</p>
+                                </div>
+                                <button onClick={() => setView(view === 'plans' ? 'active' : 'plans')} className="text-indigo-600 font-black text-xs hover:underline">
+                                    {view === 'plans' ? 'VER MEU PROGRESSO' : 'VER TODOS OS PLANOS'}
+                                </button>
+                            </div>
+
+                            {view === 'active' ? (
+                                <div className="space-y-4">
+                                    {selectedPlan.books.map(book => (
+                                        <div key={book} className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm transition-all">
+                                            <button 
+                                                onClick={() => setExpandedBook(expandedBook === book ? null : book)}
+                                                className="w-full p-6 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xs">{book.charAt(0)}</div>
+                                                    <span className="font-black text-slate-900">{book}</span>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase">
+                                                        {profile.readingStats?.readChapters?.filter((c: string) => c.startsWith(book)).length || 0} / {BIBLE_STRUCTURE[book]}
+                                                    </span>
+                                                    <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform ${expandedBook === book ? 'rotate-180' : ''}`} />
+                                                </div>
+                                            </button>
+                                            
+                                            {expandedBook === book && (
+                                                <div className="p-6 bg-slate-50/50 border-t border-slate-50 grid grid-cols-5 md:grid-cols-10 gap-2">
+                                                    {Array.from({ length: BIBLE_STRUCTURE[book] }, (_, i) => i + 1).map(chap => {
+                                                        const isRead = profile.readingStats?.readChapters?.includes(`${book}-${chap}`);
+                                                        return (
+                                                            <button 
+                                                                key={chap} 
+                                                                onClick={() => toggleChapter(book, chap)}
+                                                                className={`h-10 rounded-lg font-black text-xs transition-all flex items-center justify-center ${
+                                                                    isRead ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100 hover:border-indigo-300'
+                                                                }`}
+                                                            >
+                                                                {isRead ? <Check className="w-4 h-4" /> : chap}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <PlanGrid onStart={handleStartPlan} activeId={selectedPlan.id} />
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            <h3 className="text-2xl font-black text-slate-900">Escolha seu Plano de Voo</h3>
+                            <PlanGrid onStart={handleStartPlan} />
+                        </div>
+                    )}
+                </div>
+
+                {/* Coluna Lateral: Ranking */}
+                <div className="w-full lg:w-96 space-y-8">
+                    <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-sm flex flex-col h-full max-h-[800px]">
+                        <div className="flex items-center gap-3 mb-8">
+                            <div className="p-3 bg-amber-50 rounded-2xl text-amber-500">
+                                <Medal className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-900">Ranking Treyo</h3>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                            {leaderboard.map((u, idx) => (
+                                <div key={u.userId} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${u.userId === user.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50'}`}>
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${idx < 3 ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-500'}`}>
+                                        {idx + 1}
+                                    </div>
+                                    <div className="w-10 h-10 rounded-xl bg-slate-900/10 flex items-center justify-center font-black">
+                                        {u.userId.charAt(0)}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold text-sm truncate">{(idx === 0 ? '👑 ' : '') + (idx === 1 ? '🥈 ' : '') + (idx === 2 ? '🥉 ' : '') + u.userId.slice(0, 8)}</p>
+                                        <p className={`text-[9px] font-black uppercase ${u.userId === user.id ? 'text-indigo-200' : 'text-slate-400'}`}>Nível {u.level}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-black text-sm">{u.points || 0}</p>
+                                        <p className={`text-[8px] font-bold uppercase ${u.userId === user.id ? 'text-indigo-200' : 'text-slate-400'}`}>PTS</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+};
+
+const PlanGrid = ({ onStart, activeId }: { onStart: (p: ReadingPlan) => void, activeId?: string }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {BIBLE_PLANS.map(plan => (
+            <div key={plan.id} className={`p-8 rounded-[2.5rem] border transition-all flex flex-col ${activeId === plan.id ? 'bg-indigo-50 border-indigo-200 shadow-lg' : 'bg-white border-slate-100 hover:shadow-xl'}`}>
+                <div className="flex justify-between items-start mb-6">
+                    <span className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">{plan.category}</span>
+                    {activeId === plan.id && <span className="text-[10px] font-black text-indigo-600 animate-pulse">PLANO ATIVO</span>}
+                </div>
+                <h4 className="text-xl font-black text-slate-900 mb-2">{plan.name}</h4>
+                <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8 flex-1">{plan.description}</p>
+                <button 
+                    onClick={() => onStart(plan)}
+                    className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
+                        activeId === plan.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white'
+                    }`}
+                >
+                    {activeId === plan.id ? 'CONTINUAR LEITURA' : 'INICIAR ESTE PLANO'}
+                </button>
+            </div>
+        ))}
+    </div>
+);
 
 const WorkoutView = ({ workouts, user }: any) => {
     const [activeSplit, setActiveSplit] = useState(workouts[0]?.id || '');
@@ -407,23 +608,6 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                     ))}
                 </div>
             )}
-        </div>
-    );
-};
-
-const SpiritualView = ({ profile, leaderboard, posts, user, onUpdate }: any) => {
-    const totalChapters = 1189;
-    const progressPercent = Math.min(100, ((profile.readingStats?.totalChaptersRead || 0) / totalChapters) * 100);
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            <div className="lg:col-span-2 space-y-8">
-                <div className="bg-slate-900 p-12 rounded-[3rem] text-white relative overflow-hidden shadow-2xl">
-                    <h2 className="text-3xl font-black mb-6">Meu Ápice Bíblico</h2>
-                    <div className="w-full h-4 bg-white/10 rounded-full mb-4"><div className="h-full bg-amber-400 rounded-full shadow-[0_0_10px_#fbbf24]" style={{ width: `${progressPercent}%` }}></div></div>
-                    <div className="flex justify-between items-center"><p className="font-black text-amber-400">{profile.readingStats?.totalChaptersRead || 0} / {totalChapters} cap.</p><button onClick={() => { db.checkInReading(user.id, 1); onUpdate(); }} className="bg-white text-slate-900 px-8 py-3 rounded-2xl font-black hover:scale-105 transition-all">Marcar como Lido</button></div>
-                    <BookOpen className="absolute right-[-20px] bottom-[-20px] w-48 h-48 text-white/5 rotate-12" />
-                </div>
-            </div>
         </div>
     );
 };

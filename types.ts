@@ -37,6 +37,8 @@ export interface ReadingStats {
     totalChaptersRead: number;
     streak: number;
     lastReadDate: string;
+    activePlanId?: string;
+    readChapters: string[]; // Formato: "Livro-Capitulo" (ex: "Genesis-1")
 }
 
 export interface LibraryComment {
@@ -59,6 +61,14 @@ export interface BookReview {
     rating: number; // 1-5
     timestamp: string;
     comments: LibraryComment[];
+}
+
+export interface ReadingPlan {
+    id: string;
+    name: string;
+    category: 'Anual' | 'Cronológico' | 'Temático' | 'NT' | 'Sabedoria';
+    description: string;
+    books: string[];
 }
 
 export interface WishlistBook {

@@ -192,27 +192,34 @@ class StorageService {
   }
 
   getReadingLeaderboard(): UserProfile[] {
-    return this.getLocal<UserProfile>('profiles').sort((a,b) => {
-        const aChapters = a.readingStats?.totalChaptersRead || 0;
-        const bChapters = b.readingStats?.totalChaptersRead || 0;
-        if (bChapters !== aChapters) return bChapters - aChapters;
-        return (b.readingStats?.streak || 0) - (a.readingStats?.streak || 0);
-    });
+    return this.getLocal<UserProfile>('profiles').sort((a,b) => (b.points || 0) - (a.points || 0));
   }
 
-  async checkInReading(userId: string, chaptersRead: number = 1) {
+  async checkInReading(userId: string, book: string, chapter: number) {
     const profile = await this.getProfile(userId);
     if (profile) {
-      if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '' };
+      if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '', readChapters: [] };
+      if (!profile.readingStats.readChapters) profile.readingStats.readChapters = [];
+
+      const chapterID = `${book}-${chapter}`;
+      const isNewChapter = !profile.readingStats.readChapters.includes(chapterID);
+
       const today = new Date().toISOString().split('T')[0];
       if (profile.readingStats.lastReadDate !== today) {
         profile.readingStats.daysCompleted += 1;
         profile.readingStats.streak += 1;
         profile.readingStats.lastReadDate = today;
       }
-      profile.readingStats.totalChaptersRead += chaptersRead;
-      if (profile.readingStats.totalChaptersRead > 1189) profile.readingStats.totalChaptersRead = 1189;
-      profile.points = (profile.points || 0) + (chaptersRead * 10);
+      
+      if (isNewChapter) {
+        profile.readingStats.readChapters.push(chapterID);
+        profile.readingStats.totalChaptersRead += 1;
+        profile.points = (profile.points || 0) + 10; // 10 pontos por capítulo novo
+        
+        // Level up logic (ex: cada 500 pontos sobe de nível)
+        profile.level = Math.floor((profile.points || 0) / 500) + 1;
+      }
+
       await this.saveProfile(profile);
     }
   }
