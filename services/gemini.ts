@@ -1,14 +1,17 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, AIWorkoutSuggestion, SportType } from "../types";
 
+// Fix: Updated model to 'gemini-3-pro-preview' for complex reasoning task and used direct generateContent call
 export const generateWorkoutSuggestion = async (
     profile: UserProfile, 
     sport: SportType
 ): Promise<AIWorkoutSuggestion | null> => {
     
     try {
+        // Fix: Use named parameter for apiKey during initialization
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const modelName = 'gemini-3-flash-preview';
+        const modelName = 'gemini-3-pro-preview';
 
         const prompt = `
         Crie um plano de treino detalhado para um cliente com o seguinte perfil:
@@ -51,6 +54,7 @@ export const generateWorkoutSuggestion = async (
             }
         });
 
+        // Fix: Use .text property instead of .text() method
         const text = response.text;
         if (text) {
             return JSON.parse(text) as AIWorkoutSuggestion;
@@ -63,13 +67,14 @@ export const generateWorkoutSuggestion = async (
     }
 };
 
+// Fix: Updated model to 'gemini-3-pro-preview' for analysis task
 export const analyzeProgress = async (
     progressHistory: {date: string, weight: number}[],
     goal: string
 ): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const modelName = 'gemini-3-flash-preview';
+        const modelName = 'gemini-3-pro-preview';
         
         const historyStr = JSON.stringify(progressHistory);
         const prompt = `
@@ -84,6 +89,7 @@ export const analyzeProgress = async (
             contents: prompt,
         });
 
+        // Fix: Use .text property instead of .text() method
         return response.text || "Continue focado nos seus objetivos!";
 
     } catch (e) {

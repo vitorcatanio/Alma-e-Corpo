@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ActivityLog, ChatMessage, Badge, SportType, SpiritualPost, Exercise, CalendarEvent, SpiritualComment, BookReview, WishlistBook, LibraryComment, CommunityPost, ReadingPlan } from '../types';
 import { db } from '../services/storage';
 import { 
@@ -7,7 +7,7 @@ import {
     Flame, Timer, Send, Scale, Ruler, Camera, Plus, BookOpen, 
     Quote, Sparkles, ChevronRight, Layers, X, Save, Loader2, ArrowLeft,
     MessageSquare, Trash2, BookmarkPlus, BookMarked, Users, History, Info,
-    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus, Edit2, Medal, Check, ChevronDown, UserCircle
+    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus, Edit2, Medal, Check, ChevronDown, UserCircle, TrendingUp, ImageIcon
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -87,7 +87,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
                     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
                         <h3 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-900"><Layers className="w-5 h-5 text-indigo-600"/> Atalhos de Ação</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <QuickActionBtn icon={Camera} label="Registrar Evolução" onClick={() => onTabChange('progress')} color="text-emerald-600" />
+                            <QuickActionBtn icon={TrendingUp} label="Minha Evolução" onClick={() => onTabChange('progress')} color="text-emerald-600" />
                             <QuickActionBtn icon={Dumbbell} label="Ver Treino de Hoje" onClick={() => onTabChange('workouts')} color="text-indigo-600" />
                             <QuickActionBtn icon={BookOpen} label="Minha Leitura" onClick={() => onTabChange('spiritual')} color="text-amber-600" />
                             <QuickActionBtn icon={MessageSquare} label="Falar com Trainer" onClick={() => onTabChange('messages')} color="text-rose-600" />
@@ -113,7 +113,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
             );
 
         case 'progress':
-            return <ProgressView progress={progress} user={user} onUpdate={loadData} onBack={() => onTabChange('dashboard')} />;
+            return <EvolutionView progress={progress} user={user} profile={profile} onUpdate={loadData} onBack={() => onTabChange('dashboard')} />;
 
         case 'library':
             return (
@@ -159,7 +159,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
     }
 };
 
-// --- ESTRUTURA BÍBLICA E PLANOS ---
+// --- SUB-VIEWS DETALHADAS ---
 
 const BIBLE_STRUCTURE: Record<string, number> = {
     'Gênesis': 50, 'Êxodo': 40, 'Levítico': 27, 'Números': 36, 'Deuteronômio': 34,
@@ -186,24 +186,27 @@ const BIBLE_PLANS: ReadingPlan[] = [
     { id: 'essencial', name: 'Essenciais da Fé', category: 'Temático', description: 'Passagens chave sobre a caminhada cristã.', books: ['João', 'Romanos', 'Efésios'] }
 ];
 
-const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
+const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }: any) => {
     const [view, setView] = useState<'plans' | 'active'>('plans');
     const [selectedPlan, setSelectedPlan] = useState<ReadingPlan | null>(null);
     const [expandedBook, setExpandedBook] = useState<string | null>(null);
     const [filterCategory, setFilterCategory] = useState<string>('all');
+    // Estado local otimista para capítulos
+    const [localChapters, setLocalChapters] = useState<string[]>(initialProfile?.readingStats?.readChapters || []);
 
     useEffect(() => {
-        if (profile.readingStats?.activePlanId) {
-            const plan = BIBLE_PLANS.find(p => p.id === profile.readingStats.activePlanId);
+        setLocalChapters(initialProfile?.readingStats?.readChapters || []);
+        if (initialProfile.readingStats?.activePlanId) {
+            const plan = BIBLE_PLANS.find(p => p.id === initialProfile.readingStats.activePlanId);
             if (plan) {
                 setSelectedPlan(plan);
                 setView('active');
             }
         }
-    }, [profile.readingStats?.activePlanId]);
+    }, [initialProfile.userId, initialProfile.readingStats?.activePlanId, initialProfile.readingStats?.readChapters]);
 
     const handleStartPlan = async (plan: ReadingPlan) => {
-        const updatedProfile = { ...profile, readingStats: { ...profile.readingStats, activePlanId: plan.id } };
+        const updatedProfile = { ...initialProfile, readingStats: { ...initialProfile.readingStats, activePlanId: plan.id } };
         await db.saveProfile(updatedProfile);
         setSelectedPlan(plan);
         setView('active');
@@ -211,8 +214,15 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
     };
 
     const toggleChapter = async (book: string, chapter: number) => {
+        const chapterID = `${book}-${chapter}`;
+        // Atualização otimista imediata
+        setLocalChapters(prev => {
+            if (prev.includes(chapterID)) return prev.filter(c => c !== chapterID);
+            return [...prev, chapterID];
+        });
+
         await db.checkInReading(user.id, book, chapter);
-        onUpdate(); // Recarrega os dados para atualizar pontos e UI
+        onUpdate(); 
     };
 
     const planCategories = ['Anual', 'Cronológico', 'Temático', 'NT', 'Sabedoria'];
@@ -231,11 +241,11 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                             <div className="mt-8 flex items-center gap-6">
                                 <div className="w-24 h-24 rounded-full border-4 border-amber-400/20 flex items-center justify-center relative">
                                     <div className="absolute inset-0 rounded-full border-4 border-amber-400 border-t-transparent animate-spin-slow"></div>
-                                    <span className="text-2xl font-black text-amber-400">{profile.level}</span>
+                                    <span className="text-2xl font-black text-amber-400">{initialProfile.level}</span>
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Pontos de Estudo</p>
-                                    <p className="text-4xl font-black text-white">{profile.points || 0} <span className="text-xs text-slate-500 font-bold">PTS</span></p>
+                                    <p className="text-4xl font-black text-white">{initialProfile.points || 0} <span className="text-xs text-slate-500 font-bold">PTS</span></p>
                                 </div>
                             </div>
                         </div>
@@ -257,7 +267,7 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                 <div className="text-right">
                                     <span className="text-[10px] font-black text-emerald-600 uppercase">Seu Progresso</span>
                                     <p className="text-2xl font-black text-slate-900">
-                                        {Math.round(((profile.readingStats?.readChapters?.length || 0) / 1189) * 100)}%
+                                        {Math.round(((localChapters.length || 0) / 1189) * 100)}%
                                     </p>
                                 </div>
                             </div>
@@ -276,14 +286,14 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                                     <div className="w-32 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
                                                         <div 
                                                             className="h-full bg-emerald-500 transition-all duration-500" 
-                                                            style={{ width: `${((profile.readingStats?.readChapters?.filter((c: string) => c.startsWith(book)).length || 0) / BIBLE_STRUCTURE[book]) * 100}%` }}
+                                                            style={{ width: `${((localChapters.filter((c: string) => c.startsWith(book)).length || 0) / BIBLE_STRUCTURE[book]) * 100}%` }}
                                                         />
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-4">
                                                 <span className="text-[10px] font-black text-slate-400 uppercase">
-                                                    {profile.readingStats?.readChapters?.filter((c: string) => c.startsWith(book)).length || 0} / {BIBLE_STRUCTURE[book]}
+                                                    {localChapters.filter((c: string) => c.startsWith(book)).length || 0} / {BIBLE_STRUCTURE[book]}
                                                 </span>
                                                 <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform ${expandedBook === book ? 'rotate-180' : ''}`} />
                                             </div>
@@ -292,7 +302,7 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                         {expandedBook === book && (
                                             <div className="p-6 bg-slate-50/50 border-t border-slate-50 grid grid-cols-5 md:grid-cols-10 gap-2 animate-fade-in">
                                                 {Array.from({ length: BIBLE_STRUCTURE[book] }, (_, i) => i + 1).map(chap => {
-                                                    const isRead = profile.readingStats?.readChapters?.includes(`${book}-${chap}`);
+                                                    const isRead = localChapters.includes(`${book}-${chap}`);
                                                     return (
                                                         <button 
                                                             key={chap} 
@@ -326,10 +336,10 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                 {BIBLE_PLANS
                                     .filter(p => filterCategory === 'all' || p.category === filterCategory)
                                     .map(plan => (
-                                    <div key={plan.id} className={`p-8 rounded-[2.5rem] border transition-all flex flex-col ${profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-50 border-indigo-200 shadow-xl scale-[1.02]' : 'bg-white border-slate-100 hover:shadow-xl'}`}>
+                                    <div key={plan.id} className={`p-8 rounded-[2.5rem] border transition-all flex flex-col ${initialProfile.readingStats?.activePlanId === plan.id ? 'bg-indigo-50 border-indigo-200 shadow-xl scale-[1.02]' : 'bg-white border-slate-100 hover:shadow-xl'}`}>
                                         <div className="flex justify-between items-start mb-6">
                                             <span className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">{plan.category}</span>
-                                            {profile.readingStats?.activePlanId === plan.id && (
+                                            {initialProfile.readingStats?.activePlanId === plan.id && (
                                                 <div className="flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black uppercase animate-pulse">
                                                     <Check className="w-3 h-3"/> ATIVO
                                                 </div>
@@ -340,10 +350,10 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                         <button 
                                             onClick={() => handleStartPlan(plan)}
                                             className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
-                                                profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white'
+                                                initialProfile.readingStats?.activePlanId === plan.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white'
                                             }`}
                                         >
-                                            {profile.readingStats?.activePlanId === plan.id ? 'CONTINUAR ESTE' : 'INICIAR ESTE PLANO'}
+                                            {initialProfile.readingStats?.activePlanId === plan.id ? 'CONTINUAR ESTE' : 'INICIAR ESTE PLANO'}
                                         </button>
                                     </div>
                                 ))}
@@ -352,7 +362,7 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                     )}
                 </div>
 
-                {/* Coluna Lateral: Ranking de Usuários Reais */}
+                {/* Ranking Lateral Otimizado */}
                 <div className="w-full lg:w-96 space-y-8">
                     <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-xl flex flex-col h-fit max-h-[85vh] sticky top-8">
                         <div className="flex items-center gap-3 mb-8">
@@ -394,32 +404,212 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                                         <p className="font-bold text-sm truncate">{u.userName}</p>
                                         <div className="flex items-center gap-1.5 mt-0.5">
                                             <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${u.userId === user.id ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-500'}`}>LVL {u.level}</span>
-                                            {idx < 3 && <Trophy className="w-3 h-3 text-amber-400" />}
                                         </div>
                                     </div>
                                     <div className="text-right shrink-0">
                                         <p className="font-black text-sm leading-none">{u.points || 0}</p>
-                                        <p className={`text-[8px] font-bold uppercase tracking-tighter ${u.userId === user.id ? 'text-slate-400' : 'text-slate-400'}`}>PONTOS</p>
+                                        <p className={`text-[8px] font-bold uppercase tracking-tighter text-slate-400`}>PONTOS</p>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                    
-                    <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-indigo-100">
-                        <h4 className="font-black text-lg mb-2 flex items-center gap-2">Como subir?</h4>
-                        <p className="text-xs text-indigo-100 font-medium leading-relaxed">
-                            Marque capítulos como lidos para ganhar **10 pontos** cada. Se você desmarcar, os pontos são removidos. Apenas capítulos únicos contam pontos!
-                        </p>
-                    </div>
                 </div>
-
             </div>
         </div>
     );
 };
 
-// --- MANTENDO OUTROS COMPONENTES ---
+const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
+    const [isAdding, setIsAdding] = useState(false);
+    const [newLog, setNewLog] = useState({
+        weight: profile.weight || 0,
+        measurements: { ...profile.measurements },
+        notes: '',
+        photoUrl: ''
+    });
+    const photoInputRef = useRef<HTMLInputElement>(null);
+
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => setNewLog({ ...newLog, photoUrl: reader.result as string });
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!newLog.weight) return alert("Peso é obrigatório.");
+        const log: ProgressLog = {
+            id: Date.now().toString(),
+            userId: user.id,
+            date: new Date().toISOString(),
+            weight: newLog.weight,
+            measurements: newLog.measurements,
+            notes: newLog.notes,
+            photoUrl: newLog.photoUrl
+        };
+        await db.addProgress(log);
+        setIsAdding(false);
+        onUpdate();
+    };
+
+    return (
+        <div className="animate-fade-in pb-20 space-y-8">
+            <div className="flex justify-between items-center">
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors group">
+                    <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-slate-900 group-hover:text-white transition-all"><ArrowLeft className="w-4 h-4"/></div> 
+                    Voltar ao Início
+                </button>
+                {!isAdding && (
+                    <button onClick={() => setIsAdding(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 shadow-xl hover:scale-105 transition-all">
+                        <Plus className="w-5 h-5" /> Novo Registro
+                    </button>
+                )}
+            </div>
+
+            {isAdding ? (
+                <div className="bg-white p-8 md:p-12 rounded-[3rem] border border-slate-100 shadow-2xl space-y-8 animate-slide-up">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-3xl font-black text-slate-900">Registrar Evolução</h2>
+                        <button onClick={() => setIsAdding(false)} className="text-slate-300 hover:text-slate-900"><X /></button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                        {/* Seção de Fotos */}
+                        <div className="space-y-6">
+                            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Foto de Hoje</label>
+                            <div 
+                                onClick={() => photoInputRef.current?.click()}
+                                className="aspect-[4/5] bg-slate-50 rounded-[2.5rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center cursor-pointer hover:bg-white hover:border-indigo-200 transition-all overflow-hidden group"
+                            >
+                                {newLog.photoUrl ? (
+                                    <img src={newLog.photoUrl} className="w-full h-full object-cover" />
+                                ) : (
+                                    <>
+                                        <div className="p-6 bg-white rounded-3xl shadow-sm mb-4 group-hover:scale-110 transition-transform">
+                                            <ImageIcon className="w-10 h-10 text-slate-300" />
+                                        </div>
+                                        <p className="text-sm font-bold text-slate-400">Clique para carregar foto</p>
+                                    </>
+                                )}
+                                <input ref={photoInputRef} type="file" className="hidden" accept="image/*" onChange={handlePhotoChange} />
+                            </div>
+                        </div>
+
+                        {/* Seção de Dados */}
+                        <div className="space-y-8">
+                            <div>
+                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3">Peso Atual (kg)</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all"
+                                    value={newLog.weight}
+                                    onChange={e => setNewLog({ ...newLog, weight: parseFloat(e.target.value) })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <MeasurementInput label="Cintura (cm)" value={newLog.measurements.waist} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, waist: v } })} />
+                                <MeasurementInput label="Quadril (cm)" value={newLog.measurements.hips} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, hips: v } })} />
+                                <MeasurementInput label="Braço (cm)" value={newLog.measurements.arm} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, arm: v } })} />
+                                <MeasurementInput label="Perna (cm)" value={newLog.measurements.leg} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, leg: v } })} />
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3">Percepções e Mudanças</label>
+                                <textarea 
+                                    placeholder="Como você se sente hoje? Notou roupas mais largas? Mais energia?"
+                                    className="w-full h-32 p-5 bg-slate-50 rounded-2xl font-medium outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all resize-none"
+                                    value={newLog.notes}
+                                    onChange={e => setNewLog({ ...newLog, notes: e.target.value })}
+                                />
+                            </div>
+
+                            <button onClick={handleSave} className="w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xl shadow-2xl hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3">
+                                <Save className="w-6 h-6" /> Salvar Evolução
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-8">
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6">
+                        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                            <TrendingUp className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black text-slate-900">Linha do Tempo</h2>
+                            <p className="text-slate-400 font-medium">Acompanhe cada pequeno passo da sua transformação física.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                        {progress.length === 0 ? (
+                            <div className="col-span-full py-24 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
+                                <Camera className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                <p className="text-slate-400 font-bold italic">Nenhuma evolução registrada ainda. Comece hoje!</p>
+                            </div>
+                        ) : progress.map((log: ProgressLog) => (
+                            <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all">
+                                {log.photoUrl && (
+                                    <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100 relative">
+                                        <img src={log.photoUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                                        <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md text-white px-3 py-1 rounded-full text-[10px] font-black">
+                                            {new Date(log.date).toLocaleDateString('pt-BR')}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="p-8 space-y-6">
+                                    <div className="flex justify-between items-end border-b border-slate-50 pb-4">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Peso Registrado</p>
+                                            <p className="text-3xl font-black text-slate-900">{log.weight} kg</p>
+                                        </div>
+                                        <Scale className="w-8 h-8 text-indigo-100" />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-slate-50 p-3 rounded-2xl">
+                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Cintura</p>
+                                            <p className="font-black text-slate-700">{log.measurements?.waist || '-'} cm</p>
+                                        </div>
+                                        <div className="bg-slate-50 p-3 rounded-2xl">
+                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Quadril</p>
+                                            <p className="font-black text-slate-700">{log.measurements?.hips || '-'} cm</p>
+                                        </div>
+                                    </div>
+
+                                    {log.notes && (
+                                        <div className="relative pt-4">
+                                            <Quote className="absolute -top-1 -left-1 w-6 h-6 text-slate-100" />
+                                            <p className="text-sm text-slate-500 font-medium italic relative z-10 line-clamp-3">"{log.notes}"</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const MeasurementInput = ({ label, value, onChange }: any) => (
+    <div>
+        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1.5 ml-1">{label}</label>
+        <input 
+            type="number" 
+            className="w-full p-4 bg-slate-50 rounded-xl font-bold text-slate-900 outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-sm"
+            value={value || ''}
+            onChange={e => onChange(parseFloat(e.target.value))}
+        />
+    </div>
+);
+
+// --- COMPONENTES AUXILIARES ---
 
 const WorkoutView = ({ workouts, user }: any) => {
     const [activeSplit, setActiveSplit] = useState(workouts[0]?.id || '');
@@ -698,10 +888,6 @@ const CommunityView = ({ posts, user, onUpdate }: any) => {
         </div>
     );
 };
-
-const ProgressView = ({ progress, user, onUpdate, onBack }: any) => (
-    <div className="animate-fade-in"><button onClick={onBack} className="flex items-center gap-2 text-slate-400 font-bold mb-8 group"><div className="p-2 bg-slate-100 rounded-lg group-hover:bg-slate-900 group-hover:text-white"><ArrowLeft className="w-4 h-4"/></div> Voltar ao Início</button><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{progress.map((log:any) => <div key={log.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm"><div className="flex justify-between items-center mb-4"><p className="font-black text-2xl text-slate-900">{log.weight} kg</p><Scale className="w-5 h-5 text-indigo-500"/></div><p className="text-xs text-slate-400 font-bold">{new Date(log.date).toLocaleDateString()}</p></div>)}</div></div>
-);
 
 const QuickActionBtn = ({ icon: Icon, label, onClick, color }: any) => (
     <button onClick={onClick} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] group hover:bg-slate-900 transition-all border border-transparent shadow-sm hover:translate-y-[-4px]">

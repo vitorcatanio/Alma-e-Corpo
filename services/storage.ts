@@ -95,7 +95,8 @@ class StorageService {
     const snapshot = await get(child(this.dbRef, `progress/${userId}`));
     if (snapshot.exists()) {
         const data = snapshot.val();
-        return Object.values(data) as ProgressLog[];
+        const logs = Object.values(data) as ProgressLog[];
+        return logs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     return [];
   }
@@ -103,6 +104,12 @@ class StorageService {
   async addProgress(log: ProgressLog) { 
     const progressRef = ref(database, `progress/${log.userId}/${log.id}`);
     await set(progressRef, log);
+    const profile = await this.getProfile(log.userId);
+    if (profile) {
+        profile.weight = log.weight;
+        profile.measurements = { ...profile.measurements, ...log.measurements };
+        await this.saveProfile(profile);
+    }
   }
 
   getMessages(userId1: string, userId2: string): ChatMessage[] {
@@ -113,9 +120,20 @@ class StorageService {
   getEvents(trainerId: string): CalendarEvent[] {
     return this.getLocal<CalendarEvent>('events').filter(e => e.trainerId === trainerId).sort((a,b) => a.date.localeCompare(b.date));
   }
-  addEvent(event: CalendarEvent) { this.setLocal('events', [...this.getLocal<CalendarEvent>('events'), event]); }
-  deleteEvent(eventId: string) { this.setLocal('events', this.getLocal<CalendarEvent>('events').filter(e => e.id !== eventId)); }
+  
+  // Fix: Added missing addEvent method to StorageService
+  addEvent(event: CalendarEvent) {
+    const events = this.getLocal<CalendarEvent>('events');
+    events.push(event);
+    this.setLocal('events', events);
+  }
 
+  // Fix: Added missing deleteEvent method to StorageService
+  deleteEvent(eventId: string) {
+    const events = this.getLocal<CalendarEvent>('events').filter(e => e.id !== eventId);
+    this.setLocal('events', events);
+  }
+  
   async getReadingLeaderboard(): Promise<(UserProfile & { userName: string, avatarUrl?: string })[]> {
     const profilesSnapshot = await get(child(this.dbRef, 'profiles'));
     const usersSnapshot = await get(child(this.dbRef, 'users'));
@@ -147,21 +165,16 @@ class StorageService {
       const index = chapters.indexOf(chapterID);
 
       if (index !== -1) {
-        // Toggle Off: Remove o capítulo
         chapters.splice(index, 1);
       } else {
-        // Toggle On: Adiciona o capítulo
         chapters.push(chapterID);
       }
 
       profile.readingStats.readChapters = chapters;
       profile.readingStats.totalChaptersRead = chapters.length;
-      
-      // Cálculo de pontos real baseado em capítulos únicos
       profile.points = chapters.length * 10;
       profile.level = Math.floor(profile.points / 500) + 1;
 
-      // Gestão de Streak
       const today = new Date().toISOString().split('T')[0];
       if (profile.readingStats.lastReadDate !== today && index === -1) {
         profile.readingStats.streak = (profile.readingStats.streak || 0) + 1;

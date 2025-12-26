@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { User, UserRole } from '../types';
+import React, { useState, useEffect } from 'react';
+import { User, UserRole, UserProfile } from '../types';
 import { db } from '../services/storage';
 import { 
   LayoutDashboard, 
@@ -19,7 +19,8 @@ import {
   User as UserIcon,
   BookOpen,
   Library,
-  ChevronRight
+  ChevronRight,
+  TrendingUp
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -43,15 +44,20 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   
   const [editName, setEditName] = useState(user.name);
   const [previewAvatar, setPreviewAvatar] = useState<string | undefined>(user.avatarUrl);
+
+  useEffect(() => {
+    db.getProfile(user.id).then(setProfile);
+  }, [user.id, activeTab]);
 
   const studentNavItems = [
     { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
     { id: 'workouts', label: 'Meus Treinos', icon: Dumbbell },
     { id: 'diet', label: 'Dieta', icon: Utensils },
-    { id: 'progress', label: 'Timelapse', icon: LineChart },
+    { id: 'progress', label: 'Minha Evolução', icon: TrendingUp, needsFitness: true },
     { id: 'library', label: 'Minha Biblioteca', icon: Library },
     { id: 'spiritual', label: 'Espiritual', icon: BookOpen },
     { id: 'messages', label: 'Mensagens', icon: MessageCircle },
@@ -65,7 +71,15 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'messages', label: 'Mensagens', icon: MessageCircle },
   ];
 
-  const items = role === UserRole.STUDENT ? studentNavItems : trainerNavItems;
+  // Filtra itens do menu baseando-se no perfil do aluno
+  const filteredItems = role === UserRole.STUDENT 
+    ? studentNavItems.filter(item => {
+        if (item.needsFitness) {
+            return profile?.onboardingChoices?.wantsWeightLoss === true;
+        }
+        return true;
+    })
+    : trainerNavItems;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -132,7 +146,7 @@ export const Layout: React.FC<LayoutProps> = ({
           </button>
 
           <nav className="flex-1 space-y-1.5 overflow-y-auto pr-2 custom-scrollbar">
-            {items.map((item) => {
+            {filteredItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
