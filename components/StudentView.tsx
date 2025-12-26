@@ -7,7 +7,7 @@ import {
     Flame, Timer, Send, Scale, Ruler, Camera, Plus, BookOpen, 
     Quote, Sparkles, ChevronRight, Layers, X, Save, Loader2, ArrowLeft,
     MessageSquare, Trash2, BookmarkPlus, BookMarked, Users, History, Info,
-    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon
+    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -247,16 +247,145 @@ const DietView = ({ diet }: any) => {
 
 const LibraryView = ({ user, profile, onUpdate }: any) => {
     const [view, setView] = useState<'shelf' | 'community' | 'add'>('shelf');
-    const [newBook, setNewBook] = useState({ title: '', author: '', review: '', rating: 5 });
+    const [sortBy, setSortBy] = useState<'title' | 'author' | 'category'>('title');
+    const [filterCategory, setFilterCategory] = useState<string>('all');
+    
+    const categories = ['Espiritualidade', 'Desenvolvimento Pessoal', 'Saúde & Fitness', 'Biografia', 'Ficção', 'Negócios', 'Outros'];
+
+    const [newBook, setNewBook] = useState({ 
+        title: '', 
+        author: '', 
+        review: '', 
+        category: categories[0],
+        rating: 5 
+    });
+
     const reviews = db.getBookReviews();
+
+    // Filtra reviews conforme a aba e usuário
+    const filteredReviews = reviews
+        .filter(r => view === 'shelf' ? r.userId === user.id : true)
+        .filter(r => filterCategory === 'all' ? true : r.category === filterCategory)
+        .sort((a, b) => {
+            if (sortBy === 'title') return a.title.localeCompare(b.title);
+            if (sortBy === 'author') return a.author.localeCompare(b.author);
+            if (sortBy === 'category') return a.category.localeCompare(b.category);
+            return 0;
+        });
+
+    const handleSaveReview = () => {
+        if (!newBook.title || !newBook.review) return alert('Título e resenha são obrigatórios.');
+        db.saveBookReview({
+            id: Date.now().toString(),
+            userId: user.id,
+            userName: user.name,
+            title: newBook.title,
+            author: newBook.author,
+            category: newBook.category,
+            review: newBook.review,
+            rating: newBook.rating,
+            timestamp: new Date().toISOString(),
+            comments: []
+        });
+        setNewBook({ title: '', author: '', review: '', category: categories[0], rating: 5 });
+        setView('shelf');
+        onUpdate();
+    };
+
+    const handleAddToShelf = (book: BookReview) => {
+        db.saveBookReview({
+            ...book,
+            id: `clone-${Date.now()}`,
+            userId: user.id,
+            userName: user.name,
+            timestamp: new Date().toISOString(),
+            comments: []
+        });
+        alert('Livro adicionado à sua estante!');
+        onUpdate();
+    };
+
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center"><h2 className="text-4xl font-black text-slate-900">Biblioteca</h2><button onClick={() => setView('add')} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2"><Plus className="w-5 h-5" /> Adicionar</button></div>
-            <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 w-fit"><button onClick={() => setView('shelf')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase ${view === 'shelf' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Estante</button><button onClick={() => setView('community')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase ${view === 'community' ? 'bg-slate-900 text-white' : 'text-slate-400'}`}>Comunidade</button></div>
+        <div className="space-y-8 animate-fade-in">
+            <div className="flex justify-between items-center">
+                <h2 className="text-4xl font-black text-slate-900">Biblioteca</h2>
+                <button onClick={() => setView('add')} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 hover:scale-105 transition-all shadow-xl">
+                    <Plus className="w-5 h-5" /> Novo Livro
+                </button>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 justify-between">
+                <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 w-fit">
+                    <button onClick={() => setView('shelf')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition-all ${view === 'shelf' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Minha Estante</button>
+                    <button onClick={() => setView('community')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition-all ${view === 'community' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Comunidade</button>
+                </div>
+
+                {view === 'community' && (
+                    <div className="flex gap-3">
+                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                            <Filter className="w-4 h-4 text-slate-400" />
+                            <select className="bg-transparent text-xs font-black outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                                <option value="all">Todas Categorias</option>
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                            <SortAsc className="w-4 h-4 text-slate-400" />
+                            <select className="bg-transparent text-xs font-black outline-none" value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
+                                <option value="title">Título</option>
+                                <option value="author">Autor</option>
+                                <option value="category">Categoria</option>
+                            </select>
+                        </div>
+                    </div>
+                )}
+            </div>
+
             {view === 'add' ? (
-                <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl space-y-6"><input placeholder="Título" className="w-full p-5 bg-slate-50 rounded-2xl font-bold" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} /><textarea placeholder="Resenha" className="w-full p-5 bg-slate-50 rounded-2xl font-medium h-32" value={newBook.review} onChange={e => setNewBook({...newBook, review: e.target.value})} /><button onClick={() => { db.saveBookReview({ id: Date.now().toString(), userId: user.id, userName: user.name, title: newBook.title, author: '', review: newBook.review, rating: 5, timestamp: new Date().toISOString(), comments: [] }); setView('shelf'); onUpdate(); }} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black">Salvar</button></div>
+                <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl space-y-6 animate-slide-up">
+                    <div className="flex justify-between items-center"><h3 className="text-2xl font-black">Adicionar à Estante</h3><button onClick={() => setView('shelf')}><X /></button></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                            <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
+                            <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
+                            <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.category} onChange={e => setNewBook({...newBook, category: e.target.value})}>
+                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <textarea placeholder="Sua resenha ou notas sobre o livro..." className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-medium h-full min-h-[150px]" value={newBook.review} onChange={e => setNewBook({...newBook, review: e.target.value})} />
+                    </div>
+                    <button onClick={handleSaveReview} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-indigo-700 transition-all">Publicar na Minha Estante</button>
+                </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{reviews.map(r => <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm"><h4 className="text-xl font-black text-slate-900">{r.title}</h4><p className="text-slate-600 text-sm mt-4 italic">"{r.review}"</p></div>)}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {filteredReviews.length === 0 ? (
+                        <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
+                            <p className="text-slate-400 font-bold italic">Nenhum livro encontrado nesta seção.</p>
+                        </div>
+                    ) : filteredReviews.map(r => (
+                        <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group relative">
+                            <div className="mb-4 flex justify-between items-start">
+                                <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{r.category}</span>
+                                <div className="flex text-amber-400">{Array(r.rating).fill(0).map((_, i) => <Star key={i} className="w-3 h-3 fill-current"/>)}</div>
+                            </div>
+                            <h4 className="text-xl font-black text-slate-900 leading-tight mb-1">{r.title}</h4>
+                            <p className="text-xs font-bold text-slate-400 uppercase mb-4">{r.author}</p>
+                            <p className="text-slate-600 text-sm italic line-clamp-4 flex-1">"{r.review}"</p>
+                            
+                            <div className="mt-8 pt-6 border-t border-slate-50 flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-indigo-600">{r.userName.charAt(0)}</div>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{r.userName}</span>
+                                </div>
+                                {view === 'community' && r.userId !== user.id && (
+                                    <button onClick={() => handleAddToShelf(r)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="Adicionar à minha estante">
+                                        <BookPlus className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             )}
         </div>
     );
@@ -268,10 +397,11 @@ const SpiritualView = ({ profile, leaderboard, posts, user, onUpdate }: any) => 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2 space-y-8">
-                <div className="bg-slate-900 p-12 rounded-[3rem] text-white relative overflow-hidden">
+                <div className="bg-slate-900 p-12 rounded-[3rem] text-white relative overflow-hidden shadow-2xl">
                     <h2 className="text-3xl font-black mb-6">Meu Ápice Bíblico</h2>
-                    <div className="w-full h-4 bg-white/10 rounded-full mb-4"><div className="h-full bg-amber-400 rounded-full" style={{ width: `${progressPercent}%` }}></div></div>
-                    <div className="flex justify-between"><p className="font-black text-amber-400">{profile.readingStats?.totalChaptersRead || 0} / {totalChapters}</p><button onClick={() => { db.checkInReading(user.id, 1); onUpdate(); }} className="bg-white text-slate-900 px-8 py-3 rounded-2xl font-black">Lido Hoje</button></div>
+                    <div className="w-full h-4 bg-white/10 rounded-full mb-4"><div className="h-full bg-amber-400 rounded-full shadow-[0_0_10px_#fbbf24]" style={{ width: `${progressPercent}%` }}></div></div>
+                    <div className="flex justify-between items-center"><p className="font-black text-amber-400">{profile.readingStats?.totalChaptersRead || 0} / {totalChapters} cap.</p><button onClick={() => { db.checkInReading(user.id, 1); onUpdate(); }} className="bg-white text-slate-900 px-8 py-3 rounded-2xl font-black hover:scale-105 transition-all">Marcar como Lido</button></div>
+                    <BookOpen className="absolute right-[-20px] bottom-[-20px] w-48 h-48 text-white/5 rotate-12" />
                 </div>
             </div>
         </div>
@@ -283,12 +413,12 @@ const ChatView = ({ user, trainer, onMessageSent }: any) => {
     const [input, setInput] = useState('');
     useEffect(() => { if (trainer) { setMessages(db.getMessages(user.id, trainer.id)); } }, [trainer, user.id]);
     return (
-        <div className="bg-white h-[70vh] rounded-[3rem] border border-slate-100 flex flex-col overflow-hidden">
-            <div className="p-8 border-b font-black">{trainer?.name || 'Personal'}</div>
-            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30">
-                {messages.map(m => <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-6 rounded-[2rem] text-sm ${m.senderId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}`}>{m.content}</div></div>)}
+        <div className="bg-white h-[70vh] rounded-[3rem] border border-slate-100 flex flex-col overflow-hidden shadow-sm">
+            <div className="p-8 border-b font-black flex items-center gap-3"><div className="w-10 h-10 bg-slate-900 rounded-xl text-white flex items-center justify-center">{trainer?.name?.charAt(0) || 'P'}</div> {trainer?.name || 'Personal'}</div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30 custom-scrollbar">
+                {messages.map(m => <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-6 rounded-[2rem] text-sm ${m.senderId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'}`}>{m.content}</div></div>)}
             </div>
-            <div className="p-8 flex gap-4"><input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold" value={input} onChange={e => setInput(e.target.value)} /><button onClick={() => { if(input && trainer) { db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl"><Send /></button></div>
+            <div className="p-8 flex gap-4"><input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Sua dúvida ou relato..." value={input} onChange={e => setInput(e.target.value)} /><button onClick={() => { if(input && trainer) { db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl shadow-lg"><Send /></button></div>
         </div>
     );
 };
@@ -297,26 +427,26 @@ const CommunityView = ({ posts, user, onUpdate }: any) => {
     const [input, setInput] = useState('');
     return (
         <div className="flex flex-col h-[75vh] space-y-6">
-            <div className="flex-1 overflow-y-auto space-y-4">{posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] ${p.userId === user.id ? 'bg-slate-900 text-white' : 'bg-white border'}`}><p className="text-[10px] font-black opacity-40 uppercase">{p.userName}</p><p className="font-medium text-base">{p.content}</p></div></div>)}</div>
-            <div className="bg-white p-4 rounded-[2.5rem] border flex gap-4"><input className="flex-1 bg-slate-50 px-8 py-5 rounded-[2rem] outline-none font-bold" value={input} onChange={e => setInput(e.target.value)} /><button onClick={() => { if(input) { db.addCommunityPost({ id: Date.now().toString(), userId: user.id, userName: user.name, content: input, timestamp: new Date().toISOString() }); setInput(''); onUpdate(); } }} className="bg-slate-900 text-white p-5 rounded-[1.8rem]"><Send /></button></div>
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">{posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] shadow-sm ${p.userId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}`}><p className="text-[9px] font-black opacity-40 uppercase mb-1">{p.userName}</p><p className="font-medium text-base leading-relaxed">{p.content}</p></div></div>)}</div>
+            <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-xl flex gap-4"><input className="flex-1 bg-slate-50 px-8 py-5 rounded-[2rem] outline-none font-bold text-sm focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Compartilhe seu progresso..." value={input} onChange={e => setInput(e.target.value)} /><button onClick={() => { if(input) { db.addCommunityPost({ id: Date.now().toString(), userId: user.id, userName: user.name, content: input, timestamp: new Date().toISOString() }); setInput(''); onUpdate(); } }} className="bg-slate-900 text-white p-5 rounded-[1.8rem] shadow-xl"><Send className="w-7 h-7" /></button></div>
         </div>
     );
 };
 
 const ProgressView = ({ progress, user, onUpdate, onBack }: any) => (
-    <div className="animate-fade-in"><button onClick={onBack} className="flex items-center gap-2 text-slate-400 font-bold mb-4"><ArrowLeft className="w-4 h-4"/> Voltar</button><div className="grid grid-cols-1 md:grid-cols-3 gap-8">{progress.map((log:any) => <div key={log.id} className="bg-white p-8 rounded-[2.5rem] border"><p className="font-black text-2xl">{log.weight} kg</p></div>)}</div></div>
+    <div className="animate-fade-in"><button onClick={onBack} className="flex items-center gap-2 text-slate-400 font-bold mb-8 group"><div className="p-2 bg-slate-100 rounded-lg group-hover:bg-slate-900 group-hover:text-white"><ArrowLeft className="w-4 h-4"/></div> Voltar ao Início</button><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{progress.map((log:any) => <div key={log.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm"><div className="flex justify-between items-center mb-4"><p className="font-black text-2xl text-slate-900">{log.weight} kg</p><Scale className="w-5 h-5 text-indigo-500"/></div><p className="text-xs text-slate-400 font-bold">{new Date(log.date).toLocaleDateString()}</p></div>)}</div></div>
 );
 
 const QuickActionBtn = ({ icon: Icon, label, onClick, color }: any) => (
-    <button onClick={onClick} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] group hover:bg-slate-900 transition-all border border-transparent shadow-sm">
-        <div className="flex items-center gap-4"><div className={`p-4 bg-white rounded-2xl shadow-sm ${color} group-hover:bg-white/10 transition-all`}><Icon className="w-6 h-6" /></div><span className="font-black text-sm group-hover:text-white">{label}</span></div>
-        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-white" />
+    <button onClick={onClick} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] group hover:bg-slate-900 transition-all border border-transparent shadow-sm hover:translate-y-[-4px]">
+        <div className="flex items-center gap-4"><div className={`p-4 bg-white rounded-2xl shadow-sm ${color} group-hover:bg-white/10 group-hover:text-white transition-all`}><Icon className="w-6 h-6" /></div><span className="font-black text-sm group-hover:text-white">{label}</span></div>
+        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-white transition-all" />
     </button>
 );
 
 const MacroCard = ({ label, value, unit, color }: any) => (
     <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:translate-y-[-4px] group">
-        <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest group-hover:text-indigo-600">{label}</p>
+        <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest group-hover:text-indigo-600 transition-colors">{label}</p>
         <p className="text-3xl font-black text-slate-900">{value} <span className="text-xs font-bold text-slate-300">{unit}</span></p>
         <div className={`w-full h-1.5 ${color} rounded-full mt-4 opacity-10`}></div>
     </div>

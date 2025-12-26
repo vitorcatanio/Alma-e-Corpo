@@ -54,6 +54,7 @@ export interface BookReview {
     userAvatar?: string;
     title: string;
     author: string;
+    category: string;
     review: string;
     rating: number; // 1-5
     timestamp: string;
