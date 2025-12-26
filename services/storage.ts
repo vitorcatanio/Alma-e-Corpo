@@ -17,7 +17,8 @@ class StorageService {
     });
   }
 
-  private getLocal<T>(key: string): T[] {
+  // Changed from private to public to allow access from components like TrainerView.tsx to fetch summary data
+  public getLocal<T>(key: string): T[] {
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   }

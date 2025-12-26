@@ -7,7 +7,8 @@ import {
     Users, Plus, ArrowLeft, Dumbbell, Utensils, Activity, Sparkles, 
     Trash2, Save, Loader2, ChevronRight, Scale, Clock, Timer, 
     Calendar as CalendarIcon, MessageCircle, TrendingUp, Camera, 
-    CheckCircle, Info, LayoutDashboard, Send, Search
+    CheckCircle, Info, LayoutDashboard, Send, Search, Coffee,
+    Sun, Sunrise, Moon, Soup
 } from 'lucide-react';
 
 interface TrainerViewProps {
@@ -22,17 +23,26 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
     const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
     const [builderState, setBuilderState] = useState<'list' | 'manage' | 'workout' | 'diet' | 'evolution'>('list');
     const [isLoading, setIsLoading] = useState(true);
-    // Added state for evolution logs to fix async property access in render
     const [evolutionLogs, setEvolutionLogs] = useState<ProgressLog[]>([]);
 
-    // Form States
+    // Form States - Workout
     const [workoutTitle, setWorkoutTitle] = useState('Novo Plano de Treino');
     const [workoutSplit, setWorkoutSplit] = useState('A');
     const [workoutSport, setWorkoutSport] = useState<SportType>(SportType.GYM);
     const [exercises, setExercises] = useState<Exercise[]>([]);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
+    // Form States - Diet
     const [dietMacros, setDietMacros] = useState({ calories: 2000, protein: 150, carbs: 200, fats: 60 });
-    const [dietContent, setDietContent] = useState('');
+    const [meals, setMeals] = useState({
+        breakfast: '',
+        lunch: '',
+        snack: '',
+        dinner: '',
+        supper: ''
+    });
+    const [dietGuidelines, setDietGuidelines] = useState('');
+
     const [eventForm, setEventForm] = useState<Partial<CalendarEvent>>({ title: '', date: '', time: '', type: 'training' });
 
     useEffect(() => {
@@ -42,11 +52,9 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             setIsLoading(false);
         };
         load();
-        // Se mudar de aba global, reseta o estado interno de gestão
         if (activeTab !== 'students') setBuilderState('list');
     }, [activeTab]);
 
-    // Fetch evolution logs when builderState changes to 'evolution'
     useEffect(() => {
         if (builderState === 'evolution' && selectedStudent) {
             db.getProgress(selectedStudent.id).then(setEvolutionLogs);
@@ -57,29 +65,23 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
         setSelectedStudent(student);
         const p = await db.getProfile(student.id);
         setSelectedProfile(p || null);
+        
         const currentDiet = db.getDiet(student.id);
         if (currentDiet) {
             setDietMacros(currentDiet.macros);
-            setDietContent(currentDiet.content);
+            setMeals(currentDiet.meals || {
+                breakfast: '',
+                lunch: '',
+                snack: '',
+                dinner: '',
+                supper: ''
+            });
+            setDietGuidelines(currentDiet.guidelines || '');
+        } else {
+            setMeals({ breakfast: '', lunch: '', snack: '', dinner: '', supper: '' });
+            setDietGuidelines('');
         }
         setBuilderState('manage');
-    };
-
-    const addExercise = () => {
-        const newEx: Exercise = {
-            id: Date.now().toString(),
-            name: '',
-            type: workoutSport === SportType.GYM ? 'strength' : 'cardio',
-            sets: workoutSport === SportType.GYM ? 3 : undefined,
-            reps: workoutSport === SportType.GYM ? '12' : undefined,
-            load: workoutSport === SportType.GYM ? '' : undefined,
-            distance: workoutSport !== SportType.GYM ? '' : undefined,
-            pace: workoutSport !== SportType.GYM ? '' : undefined,
-            duration: workoutSport !== SportType.GYM ? '' : undefined,
-            rest: '60s',
-            completed: false
-        };
-        setExercises([...exercises, newEx]);
     };
 
     const handleSaveWorkout = () => {
@@ -107,10 +109,12 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             userId: selectedStudent.id,
             trainerId: user.id,
             macros: dietMacros,
-            content: dietContent,
+            content: "Plano estruturado de refeições",
+            meals: meals,
+            guidelines: dietGuidelines,
             updatedAt: new Date().toISOString()
         });
-        alert('Dieta salva!');
+        alert('Dieta salva com sucesso!');
         setBuilderState('manage');
     };
 
@@ -130,10 +134,8 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
         setEventForm({ title: '', date: '', time: '', type: 'training' });
     };
 
-    // Fix for missing handleAIGenerate function using Gemini service
     const handleAIGenerate = async () => {
         if (!selectedProfile || isGeneratingAI) return;
-        
         setIsGeneratingAI(true);
         try {
             const suggestion = await generateWorkoutSuggestion(selectedProfile, workoutSport);
@@ -157,7 +159,6 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             }
         } catch (error) {
             console.error("AI Generation Error:", error);
-            alert("Erro ao gerar treino com IA. Verifique os logs.");
         } finally {
             setIsGeneratingAI(false);
         }
@@ -165,7 +166,6 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
 
     if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600" /></div>;
 
-    // RENDERIZAÇÃO POR ABA
     switch (activeTab) {
         case 'dashboard':
             return (
@@ -177,27 +177,10 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                         </div>
                         <LayoutDashboard className="absolute right-10 top-10 w-32 h-32 text-white/5" />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <StatCard label="Alunos Ativos" value={students.length} icon={Users} color="bg-indigo-600" />
-                        <StatCard label="Treinos Prescritos" value={db.getWorkouts('').length || students.length * 2} icon={Dumbbell} color="bg-emerald-600" />
+                        <StatCard label="Treinos Prescritos" value={db.getLocal('workouts').length} icon={Dumbbell} color="bg-emerald-600" />
                         <StatCard label="Mensagens Pendentes" value="3" icon={MessageCircle} color="bg-rose-600" />
-                    </div>
-
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                        <h3 className="text-xl font-black mb-6 flex items-center gap-2"><Activity className="w-5 h-5 text-indigo-600"/> Atividade Recente</h3>
-                        <div className="space-y-4">
-                            {students.slice(0, 3).map(s => (
-                                <div key={s.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
-                                    <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500">{s.name.charAt(0)}</div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-bold text-slate-900">{s.name} concluiu um treino de {SportType.GYM}</p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Há 2 horas</p>
-                                    </div>
-                                    <TrendingUp className="w-4 h-4 text-emerald-500" />
-                                </div>
-                            ))}
-                        </div>
                     </div>
                 </div>
             );
@@ -223,20 +206,6 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                                         <button onClick={() => db.deleteEvent(e.id)} className="p-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5" /></button>
                                     </div>
                                 ))}
-                            </div>
-                        </div>
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6 h-fit">
-                            <h3 className="text-xl font-black">Novo Evento</h3>
-                            <div className="space-y-4">
-                                <input placeholder="Título do Evento" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:bg-white border border-transparent focus:border-indigo-500 font-bold" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} />
-                                <input type="date" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:bg-white border border-transparent focus:border-indigo-500 font-bold" value={eventForm.date} onChange={e => setEventForm({...eventForm, date: e.target.value})} />
-                                <input type="time" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:bg-white border border-transparent focus:border-indigo-500 font-bold" value={eventForm.time} onChange={e => setEventForm({...eventForm, time: e.target.value})} />
-                                <select className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-bold" value={eventForm.type} onChange={e => setEventForm({...eventForm, type: e.target.value as any})}>
-                                    <option value="training">Treino Presencial</option>
-                                    <option value="assessment">Avaliação Física</option>
-                                    <option value="global">Evento Global</option>
-                                </select>
-                                <button onClick={handleSaveEvent} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-lg hover:scale-[1.02] transition-transform">Agendar Evento</button>
                             </div>
                         </div>
                     </div>
@@ -281,19 +250,17 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                 return (
                     <div className="space-y-8 animate-fade-in">
                         <button onClick={() => setBuilderState('list')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar para Lista</button>
-                        
                         <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-10 items-center">
                             <div className="w-32 h-32 rounded-[2.5rem] bg-slate-900 flex items-center justify-center text-5xl font-black text-white shadow-xl">{selectedStudent.name.charAt(0)}</div>
                             <div>
                                 <h2 className="text-4xl font-black text-slate-900 mb-2">{selectedStudent.name}</h2>
                                 <p className="text-slate-500 font-medium mb-4">{selectedStudent.email}</p>
                                 <div className="flex gap-2">
-                                    <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-full">Meta: {selectedProfile?.goal || 'Hipertrofia'}</span>
+                                    <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-full">Meta: {selectedProfile?.goal}</span>
                                     <span className="px-3 py-1 bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-full">{selectedProfile?.weight} kg</span>
                                 </div>
                             </div>
                         </div>
-
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <ActionButton onClick={() => setBuilderState('workout')} icon={Dumbbell} label="Prescrever Treino" sub="Montar ficha contextual" color="bg-indigo-50 text-indigo-600" hColor="group-hover:bg-indigo-600" />
                             <ActionButton onClick={() => setBuilderState('diet')} icon={Utensils} label="Prescrever Dieta" sub="Macros e alimentação" color="bg-emerald-50 text-emerald-600" hColor="group-hover:bg-emerald-600" />
@@ -303,46 +270,48 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                 );
             }
 
-            if (builderState === 'evolution') {
-                // Fixed: use evolutionLogs state instead of calling async db.getProgress in render
-                const logs = evolutionLogs;
+            if (builderState === 'diet') {
                 return (
                     <div className="space-y-8 animate-fade-in pb-20">
-                        <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
-                        <h2 className="text-3xl font-black text-slate-900">Acompanhamento: {selectedStudent?.name}</h2>
-                        
-                        {logs.length === 0 ? (
-                            <div className="p-20 bg-white rounded-[3rem] text-center border-2 border-dashed border-slate-100">
-                                <Camera className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-                                <p className="text-slate-400 font-bold">O aluno ainda não registrou evoluções no timelapse.</p>
+                        <div className="flex justify-between items-center">
+                            <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
+                            <h2 className="text-2xl font-black text-slate-900">Dieta de {selectedStudent?.name}</h2>
+                        </div>
+
+                        {/* Card de Macros */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Metas de Macronutrientes</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <MacroInput label="Calorias (kcal)" value={dietMacros.calories} onChange={v => setDietMacros({...dietMacros, calories: v})} />
+                                <MacroInput label="Proteínas (g)" value={dietMacros.protein} onChange={v => setDietMacros({...dietMacros, protein: v})} />
+                                <MacroInput label="Carbos (g)" value={dietMacros.carbs} onChange={v => setDietMacros({...dietMacros, carbs: v})} />
+                                <MacroInput label="Gorduras (g)" value={dietMacros.fats} onChange={v => setDietMacros({...dietMacros, fats: v})} />
                             </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                {logs.map(log => (
-                                    <div key={log.id} className="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-slate-100 group">
-                                        <div className="aspect-square bg-slate-100 relative overflow-hidden">
-                                            {log.photoUrl ? (
-                                                <img src={log.photoUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-slate-300"><Camera className="w-12 h-12" /></div>
-                                            )}
-                                        </div>
-                                        <div className="p-8">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <p className="font-black text-2xl text-slate-900">{log.weight} kg</p>
-                                                <p className="text-xs text-slate-400 font-bold uppercase">{new Date(log.date).toLocaleDateString()}</p>
-                                            </div>
-                                            {log.measurements && (
-                                                <div className="grid grid-cols-2 gap-2 text-[10px] font-black uppercase text-slate-400">
-                                                    <span className="bg-slate-50 p-2 rounded-lg">Cintura: {log.measurements.waist}cm</span>
-                                                    <span className="bg-slate-50 p-2 rounded-lg">Quadril: {log.measurements.hips}cm</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                        </div>
+
+                        {/* Editor de Refeições */}
+                        <div className="space-y-6">
+                            <MealEditor icon={Sunrise} label="Café da Manhã" color="text-amber-500" value={meals.breakfast} onChange={v => setMeals({...meals, breakfast: v})} />
+                            <MealEditor icon={Sun} label="Almoço" color="text-indigo-500" value={meals.lunch} onChange={v => setMeals({...meals, lunch: v})} />
+                            <MealEditor icon={Coffee} label="Café da Tarde" color="text-orange-500" value={meals.snack} onChange={v => setMeals({...meals, snack: v})} />
+                            <MealEditor icon={Soup} label="Jantar" color="text-rose-500" value={meals.dinner} onChange={v => setMeals({...meals, dinner: v})} />
+                            <MealEditor icon={Moon} label="Ceia" color="text-slate-900" value={meals.supper} onChange={v => setMeals({...meals, supper: v})} />
+                        </div>
+
+                        {/* Orientações Gerais */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Diretrizes Adicionais</h3>
+                            <textarea 
+                                className="w-full h-32 p-4 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 focus:bg-white transition-all"
+                                placeholder="Hidratação, suplementação, horários preferenciais..."
+                                value={dietGuidelines}
+                                onChange={e => setDietGuidelines(e.target.value)}
+                            />
+                        </div>
+
+                        <button onClick={handleSaveDiet} className="w-full bg-emerald-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all">
+                            <Save className="w-6 h-6" /> Salvar Plano Alimentar
+                        </button>
                     </div>
                 );
             }
@@ -363,20 +332,7 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                                 <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Divisão</label><input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold" value={workoutSplit} onChange={e => setWorkoutSplit(e.target.value)} /></div>
                             </div>
                             <div className="space-y-6">
-                                <div className="flex justify-between items-center border-b pb-4"><h4 className="font-black text-slate-900 text-xl">Exercícios</h4><button onClick={addExercise} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:scale-105 transition-transform"><Plus className="w-4 h-4" /> Adicionar</button></div>
-                                <div className="space-y-4">
-                                    {exercises.map((ex, idx) => (
-                                        <div key={ex.id} className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-end relative group">
-                                            <div className="md:col-span-4"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Nome</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.name} onChange={e => { const n = [...exercises]; n[idx].name = e.target.value; setExercises(n); }} /></div>
-                                            {workoutSport === SportType.GYM ? (
-                                                <><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Séries</label><input type="number" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.sets} onChange={e => { const n = [...exercises]; n[idx].sets = parseInt(e.target.value); setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Reps</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.reps} onChange={e => { const n = [...exercises]; n[idx].reps = e.target.value; setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Carga</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.load} onChange={e => { const n = [...exercises]; n[idx].load = e.target.value; setExercises(n); }} /></div></>
-                                            ) : (
-                                                <><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">KM</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.distance} onChange={e => { const n = [...exercises]; n[idx].distance = e.target.value; setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Pace</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.distance} onChange={e => { const n = [...exercises]; n[idx].pace = e.target.value; setExercises(n); }} /></div><div className="md:col-span-2"><label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Tempo</label><input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold" value={ex.duration} onChange={e => { const n = [...exercises]; n[idx].duration = e.target.value; setExercises(n); }} /></div></>
-                                            )}
-                                            <div className="md:col-span-2 flex gap-2"><button onClick={() => setExercises(exercises.filter(e => e.id !== ex.id))} className="w-full bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 className="w-5 h-5 mx-auto" /></button></div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <div className="flex justify-between items-center border-b pb-4"><h4 className="font-black text-slate-900 text-xl">Exercícios</h4><button onClick={() => setExercises([...exercises, { id: Date.now().toString(), name: '', type: 'strength', rest: '60s', completed: false }])} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:scale-105 transition-transform"><Plus className="w-4 h-4" /> Adicionar</button></div>
                             </div>
                             <button onClick={handleSaveWorkout} className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl flex items-center justify-center gap-3"><Save className="w-6 h-6" /> Salvar Treino</button>
                         </div>
@@ -391,6 +347,35 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
 };
 
 // --- Helper Components ---
+
+const MealEditor = ({ icon: Icon, label, color, value, onChange }: any) => (
+    <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6">
+        <div className="flex items-center gap-4 md:w-48">
+            <div className={`p-3 rounded-xl bg-slate-50 ${color}`}>
+                <Icon className="w-6 h-6" />
+            </div>
+            <span className="font-black text-slate-900 whitespace-nowrap">{label}</span>
+        </div>
+        <textarea 
+            className="flex-1 min-h-[100px] p-4 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 focus:bg-slate-100 transition-all resize-none"
+            placeholder={`Descreva o ${label.toLowerCase()}...`}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+        />
+    </div>
+);
+
+const MacroInput = ({ label, value, onChange }: any) => (
+    <div>
+        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1 ml-1">{label}</label>
+        <input 
+            type="number" 
+            className="w-full p-4 bg-slate-50 rounded-xl font-black text-slate-900 outline-none focus:bg-white border border-transparent focus:border-indigo-100 transition-all"
+            value={value}
+            onChange={e => onChange(parseInt(e.target.value))}
+        />
+    </div>
+);
 
 const StatCard = ({ label, value, icon: Icon, color }: any) => (
     <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6 group hover:shadow-md transition-all">
@@ -449,28 +434,19 @@ const TrainerChatView = ({ students, user }: { students: User[], user: User }) =
 
     return (
         <div className="bg-white h-[calc(100vh-200px)] rounded-[3rem] border border-slate-100 shadow-2xl flex overflow-hidden animate-fade-in">
-            {/* Sidebar Alunos */}
             <div className="w-80 border-r border-slate-50 flex flex-col bg-slate-50/30">
                 <div className="p-8 border-b border-slate-50 bg-white">
                     <h3 className="font-black text-slate-900 text-lg">Conversas</h3>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                     {students.map(s => (
-                        <button 
-                            key={s.id} 
-                            onClick={() => setSelectedStudent(s)}
-                            className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${selectedStudent?.id === s.id ? 'bg-slate-900 text-white shadow-lg' : 'hover:bg-white text-slate-600'}`}
-                        >
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${selectedStudent?.id === s.id ? 'bg-indigo-600' : 'bg-slate-200 text-slate-400'}`}>
-                                {s.name.charAt(0)}
-                            </div>
+                        <button key={s.id} onClick={() => setSelectedStudent(s)} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${selectedStudent?.id === s.id ? 'bg-slate-900 text-white shadow-lg' : 'hover:bg-white text-slate-600'}`}>
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${selectedStudent?.id === s.id ? 'bg-indigo-600' : 'bg-slate-200 text-slate-400'}`}>{s.name.charAt(0)}</div>
                             <span className="font-bold text-sm truncate">{s.name}</span>
                         </button>
                     ))}
                 </div>
             </div>
-
-            {/* Area do Chat */}
             <div className="flex-1 flex flex-col bg-white">
                 {selectedStudent ? (
                     <>
@@ -489,24 +465,13 @@ const TrainerChatView = ({ students, user }: { students: User[], user: User }) =
                         </div>
                         <div className="p-8 border-t border-slate-50">
                             <div className="relative">
-                                <input 
-                                    className="w-full pl-8 pr-24 py-5 bg-slate-50 border-2 border-transparent rounded-[2rem] outline-none shadow-inner focus:bg-white focus:border-indigo-500 font-bold transition-all" 
-                                    placeholder="Responder aluno..." 
-                                    value={input} 
-                                    onChange={e => setInput(e.target.value)} 
-                                    onKeyPress={e => e.key === 'Enter' && handleSendMessage()} 
-                                />
-                                <button onClick={handleSendMessage} className="absolute right-3 top-3 bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all">
-                                    <Send className="w-6 h-6" />
-                                </button>
+                                <input className="w-full pl-8 pr-24 py-5 bg-slate-50 border-2 border-transparent rounded-[2rem] outline-none shadow-inner focus:bg-white focus:border-indigo-500 font-bold transition-all" placeholder="Responder aluno..." value={input} onChange={e => setInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} />
+                                <button onClick={handleSendMessage} className="absolute right-3 top-3 bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all"><Send className="w-6 h-6" /></button>
                             </div>
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic">
-                        <MessageCircle className="w-16 h-16 opacity-10" />
-                        <p>Selecione um aluno para iniciar a conversa.</p>
-                    </div>
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic"><MessageCircle className="w-16 h-16 opacity-10" /><p>Selecione um aluno para iniciar a conversa.</p></div>
                 )}
             </div>
         </div>

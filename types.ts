@@ -174,12 +174,26 @@ export interface MacroNutrients {
   fats: number; 
 }
 
+export interface Meal {
+  id: string;
+  name: string;
+  time?: string;
+  content: string;
+}
+
 export interface DietPlan {
   id: string;
   userId: string;
   trainerId: string;
   macros: MacroNutrients; 
   content: string; 
+  meals?: {
+    breakfast: string;
+    lunch: string;
+    snack: string;
+    dinner: string;
+    supper: string;
+  };
   guidelines?: string;
   updatedAt: string;
 }
