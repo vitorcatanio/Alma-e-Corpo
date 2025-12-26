@@ -6,7 +6,6 @@ import {
   LayoutDashboard, 
   Dumbbell, 
   Utensils, 
-  LineChart, 
   Users, 
   LogOut,
   Menu,
@@ -16,7 +15,6 @@ import {
   X,
   Camera,
   Save,
-  User as UserIcon,
   BookOpen,
   Library,
   ChevronRight,
@@ -71,10 +69,11 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'messages', label: 'Mensagens', icon: MessageCircle },
   ];
 
-  // Filtra itens do menu baseando-se no perfil do aluno
+  // Filtra itens do menu baseando-se no perfil e escolhas do onboarding
   const filteredItems = role === UserRole.STUDENT 
     ? studentNavItems.filter(item => {
         if (item.needsFitness) {
+            // Só mostra a aba de Evolução se o usuário marcou que quer perder peso/foco físico no onboarding
             return profile?.onboardingChoices?.wantsWeightLoss === true;
         }
         return true;
@@ -99,7 +98,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans overflow-x-hidden">
-      {/* Header Mobile Otimizado */}
+      {/* Header Mobile */}
       <div className="md:hidden bg-white/95 backdrop-blur-md px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-indigo-100 shadow-lg">
@@ -115,11 +114,11 @@ export const Layout: React.FC<LayoutProps> = ({
         </button>
       </div>
 
-      {/* Menu Gaveta Expansiva */}
+      {/* Sidebar */}
       <div className={`
         fixed inset-y-0 left-0 z-50 w-80 bg-white border-r border-slate-100 transform transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1)
         md:relative md:translate-x-0
-        ${isMobileMenuOpen ? 'translate-x-0 shadow-[20px_0_60px_-15px_rgba(0,0,0,0.1)]' : '-translate-x-full'}
+        ${isMobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}
       `}>
         <div className="p-8 h-full flex flex-col">
           <div className="hidden md:flex items-center gap-3 mb-10">
@@ -128,7 +127,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
             <div>
                 <h1 className="text-2xl font-black tracking-tighter text-slate-900">TREYO</h1>
-                <p className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold">Ecossistema Humano</p>
+                <p className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold">Corpo & Alma</p>
             </div>
           </div>
           
@@ -139,7 +138,9 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <div className="overflow-hidden flex-1">
                     <p className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600">{user.name}</p>
-                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-tighter">{role === 'trainer' ? 'Personal Trainer' : 'Aluno Platinum'}</p>
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-tighter">
+                        {role === UserRole.TRAINER ? 'Personal Master' : 'Amigo Platinum'}
+                    </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-all mr-1" />
              </div>
@@ -183,7 +184,7 @@ export const Layout: React.FC<LayoutProps> = ({
         </div>
       </main>
 
-      {/* Modal Profile Otimizado */}
+      {/* Modal Profile */}
       {isProfileModalOpen && (
           <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 transition-all animate-fade-in">
               <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 relative slide-up">
@@ -203,7 +204,7 @@ export const Layout: React.FC<LayoutProps> = ({
                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Seu Nome</label>
                             <input className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl outline-none font-bold text-slate-700 transition-all" value={editName} onChange={(e) => setEditName(e.target.value)} />
                           </div>
-                          <button onClick={handleSaveProfile} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black shadow-xl shadow-slate-100 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all">
+                          <button onClick={handleSaveProfile} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all">
                             <Save className="w-5 h-5" /> Salvar Alterações
                           </button>
                       </div>
