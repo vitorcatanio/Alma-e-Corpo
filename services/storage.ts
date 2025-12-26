@@ -1,5 +1,5 @@
 
-import { ref, set, get, child, remove, push } from "firebase/database";
+import { ref, set, get, child, remove, update } from "firebase/database";
 import { database } from "../firebase-config";
 import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, BookReview, WishlistBook, LibraryComment, SpiritualPost, CommunityPost } from '../types';
 
@@ -61,9 +61,6 @@ class StorageService {
     const snapshot = await get(child(this.dbRef, `profiles/${userId}`));
     if (snapshot.exists()) {
       const profile = snapshot.val() as UserProfile;
-      const profiles = this.getLocal<UserProfile>('profiles').filter(p => p.userId !== userId);
-      profiles.push(profile);
-      this.setLocal('profiles', profiles);
       return profile;
     }
     return this.getLocal<UserProfile>('profiles').find(p => p.userId === userId);
@@ -100,28 +97,20 @@ class StorageService {
     if (snapshot.exists()) {
         const data = snapshot.val();
         const logs = Object.values(data) as ProgressLog[];
-        this.setLocal('progress', [...this.getLocal<ProgressLog>('progress').filter(p => p.userId !== userId), ...logs]);
         return logs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
-    return this.getLocal<ProgressLog>('progress')
-        .filter(p => p.userId === userId)
-        .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
+    return [];
   }
 
   async addProgress(log: ProgressLog) { 
     const progressRef = ref(database, `progress/${log.userId}/${log.id}`);
     await set(progressRef, log);
-    this.setLocal('progress', [...this.getLocal<ProgressLog>('progress'), log]); 
     const profile = await this.getProfile(log.userId);
     if (profile) {
         profile.weight = log.weight;
         profile.measurements = { ...profile.measurements, ...log.measurements };
         await this.saveProfile(profile);
     }
-  }
-
-  getActivity(userId: string): ActivityLog[] {
-    return this.getLocal<ActivityLog>('activity').filter(a => a.userId === userId);
   }
 
   getMessages(userId1: string, userId2: string): ChatMessage[] {
@@ -135,20 +124,62 @@ class StorageService {
   addEvent(event: CalendarEvent) { this.setLocal('events', [...this.getLocal<CalendarEvent>('events'), event]); }
   deleteEvent(eventId: string) { this.setLocal('events', this.getLocal<CalendarEvent>('events').filter(e => e.id !== eventId)); }
 
-  async rsvpToEvent(eventId: string, userId: string, attending: boolean) {
-    const events = this.getLocal<CalendarEvent>('events');
-    const index = events.findIndex(e => e.id === eventId);
-    if (index !== -1) {
-        let attendees = events[index].attendees || [];
-        if (attending) { if (!attendees.includes(userId)) attendees.push(userId); }
-        else { attendees = attendees.filter(id => id !== userId); }
-        events[index].attendees = attendees;
-        this.setLocal('events', events);
-    }
+  async getReadingLeaderboard(): Promise<(UserProfile & { userName: string, avatarUrl?: string })[]> {
+    const profilesSnapshot = await get(child(this.dbRef, 'profiles'));
+    const usersSnapshot = await get(child(this.dbRef, 'users'));
+    
+    if (!profilesSnapshot.exists()) return [];
+    
+    const profilesData = profilesSnapshot.val();
+    const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
+    
+    const profiles = Object.values(profilesData) as UserProfile[];
+    
+    return profiles.map(p => ({
+        ...p,
+        userName: usersData[p.userId]?.name || 'Usuário',
+        avatarUrl: usersData[p.userId]?.avatarUrl
+    })).sort((a, b) => (b.points || 0) - (a.points || 0));
   }
 
-  getStudentEvents(userId: string): CalendarEvent[] {
-    return this.getLocal<CalendarEvent>('events').filter(e => e.type === 'global' || e.studentId === userId).sort((a,b) => a.date.localeCompare(b.date));
+  async checkInReading(userId: string, book: string, chapter: number) {
+    const profile = await this.getProfile(userId);
+    if (profile) {
+      if (!profile.readingStats) {
+        profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '', readChapters: [] };
+      }
+      
+      if (!profile.readingStats.readChapters) profile.readingStats.readChapters = [];
+
+      const chapterID = `${book}-${chapter}`;
+      const chapters = [...profile.readingStats.readChapters];
+      const index = chapters.indexOf(chapterID);
+
+      if (index !== -1) {
+        // Toggle off: Remover se já existir
+        chapters.splice(index, 1);
+      } else {
+        // Toggle on: Adicionar
+        chapters.push(chapterID);
+      }
+
+      profile.readingStats.readChapters = chapters;
+      profile.readingStats.totalChaptersRead = chapters.length;
+      
+      // Pontuação: Sempre baseada na contagem de capítulos únicos lidos
+      profile.points = chapters.length * 10;
+      profile.level = Math.floor(profile.points / 500) + 1;
+
+      // Logica de ofensiva (Streak)
+      const today = new Date().toISOString().split('T')[0];
+      if (profile.readingStats.lastReadDate !== today && index === -1) { // Só ganha streak se estiver marcando novo capítulo hoje
+        profile.readingStats.daysCompleted += 1;
+        profile.readingStats.streak += 1;
+        profile.readingStats.lastReadDate = today;
+      }
+
+      await this.saveProfile(profile);
+    }
   }
 
   getBookReviews(): BookReview[] {
@@ -158,79 +189,13 @@ class StorageService {
   saveBookReview(review: BookReview) {
     let reviews = this.getLocal<BookReview>('book_reviews');
     const index = reviews.findIndex(r => r.id === review.id);
-    if (index !== -1) {
-        reviews[index] = review;
-    } else {
-        reviews = [review, ...reviews];
-    }
+    if (index !== -1) reviews[index] = review;
+    else reviews = [review, ...reviews];
     this.setLocal('book_reviews', reviews);
-  }
-
-  addReviewComment(reviewId: string, comment: LibraryComment) {
-    const reviews = this.getLocal<BookReview>('book_reviews');
-    const index = reviews.findIndex(r => r.id === reviewId);
-    if (index !== -1) {
-        if (!reviews[index].comments) reviews[index].comments = [];
-        reviews[index].comments.push(comment);
-        this.setLocal('book_reviews', reviews);
-    }
-  }
-
-  getWishlist(userId: string): WishlistBook[] {
-    return this.getLocal<WishlistBook>('book_wishlist').filter(w => w.userId === userId);
-  }
-
-  addToWishlist(wish: WishlistBook) {
-    const wishlist = this.getLocal<WishlistBook>('book_wishlist');
-    if (!wishlist.find(w => w.userId === wish.userId && w.title === wish.title)) {
-        this.setLocal('book_wishlist', [...wishlist, wish]);
-    }
-  }
-
-  removeFromWishlist(wishId: string) {
-    this.setLocal('book_wishlist', this.getLocal<WishlistBook>('book_wishlist').filter(w => w.id !== wishId));
-  }
-
-  getReadingLeaderboard(): UserProfile[] {
-    return this.getLocal<UserProfile>('profiles').sort((a,b) => (b.points || 0) - (a.points || 0));
-  }
-
-  async checkInReading(userId: string, book: string, chapter: number) {
-    const profile = await this.getProfile(userId);
-    if (profile) {
-      if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '', readChapters: [] };
-      if (!profile.readingStats.readChapters) profile.readingStats.readChapters = [];
-
-      const chapterID = `${book}-${chapter}`;
-      const isNewChapter = !profile.readingStats.readChapters.includes(chapterID);
-
-      const today = new Date().toISOString().split('T')[0];
-      if (profile.readingStats.lastReadDate !== today) {
-        profile.readingStats.daysCompleted += 1;
-        profile.readingStats.streak += 1;
-        profile.readingStats.lastReadDate = today;
-      }
-      
-      if (isNewChapter) {
-        profile.readingStats.readChapters.push(chapterID);
-        profile.readingStats.totalChaptersRead += 1;
-        profile.points = (profile.points || 0) + 10; // 10 pontos por capítulo novo
-        
-        // Level up logic (ex: cada 500 pontos sobe de nível)
-        profile.level = Math.floor((profile.points || 0) / 500) + 1;
-      }
-
-      await this.saveProfile(profile);
-    }
   }
 
   getSpiritualPosts(): SpiritualPost[] {
     return this.getLocal<SpiritualPost>('spiritual_posts').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }
-
-  addSpiritualPost(post: SpiritualPost) {
-    const posts = this.getLocal<SpiritualPost>('spiritual_posts');
-    this.setLocal('spiritual_posts', [post, ...posts]);
   }
 
   getCommunityPosts(): CommunityPost[] {

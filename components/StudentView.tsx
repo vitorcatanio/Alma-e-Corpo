@@ -7,7 +7,7 @@ import {
     Flame, Timer, Send, Scale, Ruler, Camera, Plus, BookOpen, 
     Quote, Sparkles, ChevronRight, Layers, X, Save, Loader2, ArrowLeft,
     MessageSquare, Trash2, BookmarkPlus, BookMarked, Users, History, Info,
-    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus, Edit2, Medal, Check, ChevronDown
+    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus, Edit2, Medal, Check, ChevronDown, UserCircle
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -23,7 +23,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
     const [progress, setProgress] = useState<ProgressLog[]>([]);
     const [spiritualPosts, setSpiritualPosts] = useState<SpiritualPost[]>([]);
     const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
-    const [leaderboard, setLeaderboard] = useState<UserProfile[]>([]);
+    const [leaderboard, setLeaderboard] = useState<(UserProfile & { userName: string, avatarUrl?: string })[]>([]);
     const [trainer, setTrainer] = useState<User | undefined>();
     const [loading, setLoading] = useState(true);
     
@@ -31,22 +31,25 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
         const allUsers = await db.getAllUsersFromDb();
         const foundTrainer = allUsers.find(u => u.role === 'trainer');
         const p = await db.getProfile(user.id);
-        const prog = await db.getProgress(user.id);
+        const l = await db.getReadingLeaderboard();
         
         setTrainer(foundTrainer);
         setProfile(p);
-        setProgress(prog);
+        setLeaderboard(l);
         setWorkouts(db.getWorkouts(user.id));
         setDiet(db.getDiet(user.id));
         setSpiritualPosts(db.getSpiritualPosts());
         setCommunityPosts(db.getCommunityPosts());
-        setLeaderboard(db.getReadingLeaderboard());
+        
+        const prog = await db.getProgress(user.id);
+        setProgress(prog);
+        
         setLoading(false);
     };
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(loadData, 10000); 
+        const interval = setInterval(loadData, 8000); 
         return () => clearInterval(interval);
     }, [user.id, activeTab]);
 
@@ -68,7 +71,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
                 <div className="space-y-8 animate-fade-in pb-20">
                     <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
                         <div className="relative z-10">
-                            <h2 className="text-4xl font-black mb-2">Olá, {user.name.split(' ')[0]}</h2>
+                            <h2 className="text-4xl font-black mb-2 text-white">Olá, {user.name.split(' ')[0]}</h2>
                             <p className="text-slate-400 font-medium leading-relaxed">Seu corpo é o templo, sua mente é a força.</p>
                         </div>
                         <Sparkles className="absolute right-10 top-10 w-24 h-24 text-white/5" />
@@ -124,7 +127,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
             return (
                 <div className="space-y-6 animate-fade-in pb-20">
                     <BackButton />
-                    <SpiritualView user={user} profile={profile} posts={spiritualPosts} leaderboard={leaderboard} onUpdate={loadData} />
+                    <SpiritualView user={user} profile={profile} leaderboard={leaderboard} onUpdate={loadData} />
                 </div>
             );
 
@@ -191,7 +194,10 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
     useEffect(() => {
         if (profile.readingStats?.activePlanId) {
             const plan = BIBLE_PLANS.find(p => p.id === profile.readingStats.activePlanId);
-            if (plan) setSelectedPlan(plan);
+            if (plan) {
+                setSelectedPlan(plan);
+                setView('active');
+            }
         }
     }, [profile.readingStats?.activePlanId]);
 
@@ -214,9 +220,9 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                 
                 {/* Coluna Principal: Leitura */}
                 <div className="flex-1 space-y-8">
-                    <div className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl">
+                    <div className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
                         <div className="relative z-10">
-                            <h2 className="text-3xl font-black mb-2">Ápice Espiritual</h2>
+                            <h2 className="text-3xl font-black mb-2 text-white">Ápice Espiritual</h2>
                             <p className="text-slate-400 font-medium">Cada capítulo lido é um degrau na sua evolução.</p>
                             
                             <div className="mt-8 flex items-center gap-6">
@@ -233,95 +239,140 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                         <BookOpen className="absolute right-[-40px] bottom-[-40px] w-64 h-64 text-white/5 -rotate-12" />
                     </div>
 
-                    {selectedPlan ? (
+                    {selectedPlan && view === 'active' ? (
                         <div className="space-y-6">
                             <div className="flex justify-between items-center">
-                                <div>
-                                    <h3 className="text-2xl font-black text-slate-900">{selectedPlan.name}</h3>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedPlan.category}</p>
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => setView('plans')} className="p-2 bg-white rounded-xl border border-slate-100 text-slate-400 hover:text-indigo-600 transition-all">
+                                        <ArrowLeft className="w-5 h-5" />
+                                    </button>
+                                    <div>
+                                        <h3 className="text-2xl font-black text-slate-900 leading-tight">{selectedPlan.name}</h3>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedPlan.category}</p>
+                                    </div>
                                 </div>
-                                <button onClick={() => setView(view === 'plans' ? 'active' : 'plans')} className="text-indigo-600 font-black text-xs hover:underline">
-                                    {view === 'plans' ? 'VER MEU PROGRESSO' : 'VER TODOS OS PLANOS'}
-                                </button>
+                                <div className="text-right">
+                                    <span className="text-xs font-black text-indigo-600 uppercase">Seu Progresso</span>
+                                    <p className="text-2xl font-black text-slate-900">
+                                        {Math.round(((profile.readingStats?.readChapters?.length || 0) / 1189) * 100)}%
+                                    </p>
+                                </div>
                             </div>
 
-                            {view === 'active' ? (
-                                <div className="space-y-4">
-                                    {selectedPlan.books.map(book => (
-                                        <div key={book} className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm transition-all">
-                                            <button 
-                                                onClick={() => setExpandedBook(expandedBook === book ? null : book)}
-                                                className="w-full p-6 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xs">{book.charAt(0)}</div>
-                                                    <span className="font-black text-slate-900">{book}</span>
+                            <div className="space-y-4">
+                                {selectedPlan.books.map(book => (
+                                    <div key={book} className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm transition-all">
+                                        <button 
+                                            onClick={() => setExpandedBook(expandedBook === book ? null : book)}
+                                            className="w-full p-6 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-4 text-left">
+                                                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xs">{book.charAt(0)}</div>
+                                                <div>
+                                                    <span className="font-black text-slate-900 block">{book}</span>
+                                                    <div className="w-32 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                                                        <div 
+                                                            className="h-full bg-emerald-500 transition-all duration-500" 
+                                                            style={{ width: `${((profile.readingStats?.readChapters?.filter((c: string) => c.startsWith(book)).length || 0) / BIBLE_STRUCTURE[book]) * 100}%` }}
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-4">
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase">
-                                                        {profile.readingStats?.readChapters?.filter((c: string) => c.startsWith(book)).length || 0} / {BIBLE_STRUCTURE[book]}
-                                                    </span>
-                                                    <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform ${expandedBook === book ? 'rotate-180' : ''}`} />
-                                                </div>
-                                            </button>
-                                            
-                                            {expandedBook === book && (
-                                                <div className="p-6 bg-slate-50/50 border-t border-slate-50 grid grid-cols-5 md:grid-cols-10 gap-2">
-                                                    {Array.from({ length: BIBLE_STRUCTURE[book] }, (_, i) => i + 1).map(chap => {
-                                                        const isRead = profile.readingStats?.readChapters?.includes(`${book}-${chap}`);
-                                                        return (
-                                                            <button 
-                                                                key={chap} 
-                                                                onClick={() => toggleChapter(book, chap)}
-                                                                className={`h-10 rounded-lg font-black text-xs transition-all flex items-center justify-center ${
-                                                                    isRead ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100 hover:border-indigo-300'
-                                                                }`}
-                                                            >
-                                                                {isRead ? <Check className="w-4 h-4" /> : chap}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <PlanGrid onStart={handleStartPlan} activeId={selectedPlan.id} />
-                            )}
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase">
+                                                    {profile.readingStats?.readChapters?.filter((c: string) => c.startsWith(book)).length || 0} / {BIBLE_STRUCTURE[book]}
+                                                </span>
+                                                <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform ${expandedBook === book ? 'rotate-180' : ''}`} />
+                                            </div>
+                                        </button>
+                                        
+                                        {expandedBook === book && (
+                                            <div className="p-6 bg-slate-50/50 border-t border-slate-50 grid grid-cols-5 md:grid-cols-10 gap-2 animate-fade-in">
+                                                {Array.from({ length: BIBLE_STRUCTURE[book] }, (_, i) => i + 1).map(chap => {
+                                                    const isRead = profile.readingStats?.readChapters?.includes(`${book}-${chap}`);
+                                                    return (
+                                                        <button 
+                                                            key={chap} 
+                                                            onClick={() => toggleChapter(book, chap)}
+                                                            className={`h-10 rounded-lg font-black text-xs transition-all flex items-center justify-center border shadow-sm ${
+                                                                isRead ? 'bg-indigo-600 border-indigo-600 text-white scale-95' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-300 active:scale-90'
+                                                            }`}
+                                                        >
+                                                            {isRead ? <Check className="w-4 h-4" /> : chap}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            <h3 className="text-2xl font-black text-slate-900">Escolha seu Plano de Voo</h3>
-                            <PlanGrid onStart={handleStartPlan} />
+                        <div className="space-y-8">
+                            <h3 className="text-3xl font-black text-slate-900">Escolha seu Plano</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {BIBLE_PLANS.map(plan => (
+                                    <div key={plan.id} className={`p-8 rounded-[2.5rem] border transition-all flex flex-col ${profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-50 border-indigo-200 shadow-lg' : 'bg-white border-slate-100 hover:shadow-xl'}`}>
+                                        <div className="flex justify-between items-start mb-6">
+                                            <span className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">{plan.category}</span>
+                                            {profile.readingStats?.activePlanId === plan.id && <span className="text-[10px] font-black text-indigo-600 flex items-center gap-1"><Check className="w-3 h-3"/> ATIVO</span>}
+                                        </div>
+                                        <h4 className="text-xl font-black text-slate-900 mb-2">{plan.name}</h4>
+                                        <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8 flex-1">{plan.description}</p>
+                                        <button 
+                                            onClick={() => handleStartPlan(plan)}
+                                            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
+                                                profile.readingStats?.activePlanId === plan.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white'
+                                            }`}
+                                        >
+                                            {profile.readingStats?.activePlanId === plan.id ? 'CONTINUAR ESTE' : 'INICIAR ESTE PLANO'}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
 
-                {/* Coluna Lateral: Ranking */}
+                {/* Coluna Lateral: Ranking Real */}
                 <div className="w-full lg:w-96 space-y-8">
                     <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-sm flex flex-col h-full max-h-[800px]">
                         <div className="flex items-center gap-3 mb-8">
                             <div className="p-3 bg-amber-50 rounded-2xl text-amber-500">
                                 <Medal className="w-6 h-6" />
                             </div>
-                            <h3 className="text-xl font-black text-slate-900">Ranking Treyo</h3>
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900">Ranking Real</h3>
+                                <p className="text-[10px] font-black text-slate-400 uppercase">Gamificação Espiritual</p>
+                            </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                            {leaderboard.map((u, idx) => (
-                                <div key={u.userId} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${u.userId === user.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50'}`}>
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${idx < 3 ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-500'}`}>
+                            {leaderboard.length === 0 ? (
+                                <div className="text-center py-10">
+                                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-slate-200" />
+                                    <p className="text-xs font-bold text-slate-300 mt-2">Carregando Ranking...</p>
+                                </div>
+                            ) : leaderboard.map((u, idx) => (
+                                <div key={u.userId} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${u.userId === user.id ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-slate-50'}`}>
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${idx === 0 ? 'bg-amber-400 text-white shadow-sm' : idx === 1 ? 'bg-slate-300 text-white' : idx === 2 ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
                                         {idx + 1}
                                     </div>
-                                    <div className="w-10 h-10 rounded-xl bg-slate-900/10 flex items-center justify-center font-black">
-                                        {u.userId.charAt(0)}
+                                    <div className="w-10 h-10 rounded-xl bg-slate-200 overflow-hidden border-2 border-white shadow-sm shrink-0">
+                                        {u.avatarUrl ? (
+                                            <img src={u.avatarUrl} alt={u.userName} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center font-black text-slate-400 text-xs">
+                                                {u.userName.charAt(0)}
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="font-bold text-sm truncate">{(idx === 0 ? '👑 ' : '') + (idx === 1 ? '🥈 ' : '') + (idx === 2 ? '🥉 ' : '') + u.userId.slice(0, 8)}</p>
+                                    <div className="flex-1 overflow-hidden">
+                                        <p className="font-bold text-sm truncate">{u.userName}</p>
                                         <p className={`text-[9px] font-black uppercase ${u.userId === user.id ? 'text-indigo-200' : 'text-slate-400'}`}>Nível {u.level}</p>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right shrink-0">
                                         <p className="font-black text-sm">{u.points || 0}</p>
                                         <p className={`text-[8px] font-bold uppercase ${u.userId === user.id ? 'text-indigo-200' : 'text-slate-400'}`}>PTS</p>
                                     </div>
@@ -329,35 +380,19 @@ const SpiritualView = ({ profile, leaderboard, user, onUpdate }: any) => {
                             ))}
                         </div>
                     </div>
+                    
+                    <div className="bg-indigo-50 p-8 rounded-[2.5rem] border border-indigo-100">
+                        <h4 className="font-black text-indigo-900 mb-2 flex items-center gap-2"><Trophy className="w-4 h-4"/> Como ganhar?</h4>
+                        <p className="text-xs text-indigo-700 font-medium leading-relaxed">
+                            Você ganha **10 pontos** para cada capítulo novo que marcar como lido. Releituras não somam pontos adicionais para manter o ranking justo para todos!
+                        </p>
+                    </div>
                 </div>
 
             </div>
         </div>
     );
 };
-
-const PlanGrid = ({ onStart, activeId }: { onStart: (p: ReadingPlan) => void, activeId?: string }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {BIBLE_PLANS.map(plan => (
-            <div key={plan.id} className={`p-8 rounded-[2.5rem] border transition-all flex flex-col ${activeId === plan.id ? 'bg-indigo-50 border-indigo-200 shadow-lg' : 'bg-white border-slate-100 hover:shadow-xl'}`}>
-                <div className="flex justify-between items-start mb-6">
-                    <span className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">{plan.category}</span>
-                    {activeId === plan.id && <span className="text-[10px] font-black text-indigo-600 animate-pulse">PLANO ATIVO</span>}
-                </div>
-                <h4 className="text-xl font-black text-slate-900 mb-2">{plan.name}</h4>
-                <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8 flex-1">{plan.description}</p>
-                <button 
-                    onClick={() => onStart(plan)}
-                    className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
-                        activeId === plan.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white'
-                    }`}
-                >
-                    {activeId === plan.id ? 'CONTINUAR LEITURA' : 'INICIAR ESTE PLANO'}
-                </button>
-            </div>
-        ))}
-    </div>
-);
 
 const WorkoutView = ({ workouts, user }: any) => {
     const [activeSplit, setActiveSplit] = useState(workouts[0]?.id || '');
