@@ -7,7 +7,7 @@ import {
     Flame, Timer, Send, Scale, Ruler, Camera, Plus, BookOpen, 
     Quote, Sparkles, ChevronRight, Layers, X, Save, Loader2, ArrowLeft,
     MessageSquare, Trash2, BookmarkPlus, BookMarked, Users, History, Info,
-    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus
+    Star, Search, Heart, Share2, Sunrise, Sun, Coffee, Soup, Moon, Filter, SortAsc, BookPlus, Edit2
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -200,7 +200,6 @@ const DietView = ({ diet }: any) => {
         <div className="space-y-10 animate-fade-in">
             <h2 className="text-4xl font-black text-slate-900">Alimentação</h2>
             
-            {/* Macros Section */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <MacroCard label="Calorias" value={diet.macros.calories} unit="kcal" color="bg-indigo-500" />
                 <MacroCard label="Proteínas" value={diet.macros.protein} unit="g" color="bg-rose-500" />
@@ -208,7 +207,6 @@ const DietView = ({ diet }: any) => {
                 <MacroCard label="Gorduras" value={diet.macros.fats} unit="g" color="bg-emerald-500" />
             </div>
 
-            {/* Meals Section */}
             <div className="space-y-6">
                 {mealList.map(m => {
                     const content = diet.meals?.[m.id as keyof typeof diet.meals];
@@ -232,7 +230,6 @@ const DietView = ({ diet }: any) => {
                 })}
             </div>
 
-            {/* Guidelines Section */}
             {diet.guidelines && (
                 <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-xl">
                     <h3 className="text-xl font-black mb-4 flex items-center gap-3">
@@ -253,6 +250,7 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
     const categories = ['Espiritualidade', 'Desenvolvimento Pessoal', 'Saúde & Fitness', 'Biografia', 'Ficção', 'Negócios', 'Outros'];
 
     const [newBook, setNewBook] = useState({ 
+        id: '',
         title: '', 
         author: '', 
         review: '', 
@@ -262,34 +260,49 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
 
     const reviews = db.getBookReviews();
 
-    // Filtra reviews conforme a aba e usuário
     const filteredReviews = reviews
         .filter(r => view === 'shelf' ? r.userId === user.id : true)
-        .filter(r => filterCategory === 'all' ? true : r.category === filterCategory)
+        .filter(r => {
+            if (filterCategory === 'all') return true;
+            const cat = r.category || 'Outros';
+            return cat === filterCategory;
+        })
         .sort((a, b) => {
             if (sortBy === 'title') return a.title.localeCompare(b.title);
-            if (sortBy === 'author') return a.author.localeCompare(b.author);
-            if (sortBy === 'category') return a.category.localeCompare(b.category);
+            if (sortBy === 'author') return (a.author || '').localeCompare(b.author || '');
+            if (sortBy === 'category') return (a.category || 'Outros').localeCompare(b.category || 'Outros');
             return 0;
         });
 
     const handleSaveReview = () => {
         if (!newBook.title || !newBook.review) return alert('Título e resenha são obrigatórios.');
         db.saveBookReview({
-            id: Date.now().toString(),
+            id: newBook.id || Date.now().toString(),
             userId: user.id,
             userName: user.name,
             title: newBook.title,
             author: newBook.author,
-            category: newBook.category,
+            category: newBook.category || 'Outros',
             review: newBook.review,
             rating: newBook.rating,
             timestamp: new Date().toISOString(),
             comments: []
         });
-        setNewBook({ title: '', author: '', review: '', category: categories[0], rating: 5 });
+        setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 });
         setView('shelf');
         onUpdate();
+    };
+
+    const handleEditBook = (book: BookReview) => {
+        setNewBook({
+            id: book.id,
+            title: book.title,
+            author: book.author || '',
+            review: book.review,
+            category: book.category || 'Outros',
+            rating: book.rating || 5
+        });
+        setView('add');
     };
 
     const handleAddToShelf = (book: BookReview) => {
@@ -309,7 +322,7 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
         <div className="space-y-8 animate-fade-in">
             <div className="flex justify-between items-center">
                 <h2 className="text-4xl font-black text-slate-900">Biblioteca</h2>
-                <button onClick={() => setView('add')} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 hover:scale-105 transition-all shadow-xl">
+                <button onClick={() => { setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 }); setView('add'); }} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 hover:scale-105 transition-all shadow-xl">
                     <Plus className="w-5 h-5" /> Novo Livro
                 </button>
             </div>
@@ -320,30 +333,28 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                     <button onClick={() => setView('community')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition-all ${view === 'community' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Comunidade</button>
                 </div>
 
-                {view === 'community' && (
-                    <div className="flex gap-3">
-                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
-                            <Filter className="w-4 h-4 text-slate-400" />
-                            <select className="bg-transparent text-xs font-black outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                                <option value="all">Todas Categorias</option>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
-                            <SortAsc className="w-4 h-4 text-slate-400" />
-                            <select className="bg-transparent text-xs font-black outline-none" value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
-                                <option value="title">Título</option>
-                                <option value="author">Autor</option>
-                                <option value="category">Categoria</option>
-                            </select>
-                        </div>
+                <div className="flex gap-3">
+                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                        <Filter className="w-4 h-4 text-slate-400" />
+                        <select className="bg-transparent text-xs font-black outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                            <option value="all">Todas Categorias</option>
+                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
                     </div>
-                )}
+                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+                        <SortAsc className="w-4 h-4 text-slate-400" />
+                        <select className="bg-transparent text-xs font-black outline-none" value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
+                            <option value="title">Título</option>
+                            <option value="author">Autor</option>
+                            <option value="category">Categoria</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             {view === 'add' ? (
                 <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl space-y-6 animate-slide-up">
-                    <div className="flex justify-between items-center"><h3 className="text-2xl font-black">Adicionar à Estante</h3><button onClick={() => setView('shelf')}><X /></button></div>
+                    <div className="flex justify-between items-center"><h3 className="text-2xl font-black">{newBook.id ? 'Editar Livro' : 'Adicionar à Estante'}</h3><button onClick={() => setView('shelf')}><X /></button></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
@@ -354,7 +365,9 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                         </div>
                         <textarea placeholder="Sua resenha ou notas sobre o livro..." className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-medium h-full min-h-[150px]" value={newBook.review} onChange={e => setNewBook({...newBook, review: e.target.value})} />
                     </div>
-                    <button onClick={handleSaveReview} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-indigo-700 transition-all">Publicar na Minha Estante</button>
+                    <button onClick={handleSaveReview} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-indigo-700 transition-all">
+                        {newBook.id ? 'Salvar Alterações' : 'Publicar na Minha Estante'}
+                    </button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -365,11 +378,11 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                     ) : filteredReviews.map(r => (
                         <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group relative">
                             <div className="mb-4 flex justify-between items-start">
-                                <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{r.category}</span>
-                                <div className="flex text-amber-400">{Array(r.rating).fill(0).map((_, i) => <Star key={i} className="w-3 h-3 fill-current"/>)}</div>
+                                <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{r.category || 'Outros'}</span>
+                                <div className="flex text-amber-400">{Array(r.rating || 5).fill(0).map((_, i) => <Star key={i} className="w-3 h-3 fill-current"/>)}</div>
                             </div>
                             <h4 className="text-xl font-black text-slate-900 leading-tight mb-1">{r.title}</h4>
-                            <p className="text-xs font-bold text-slate-400 uppercase mb-4">{r.author}</p>
+                            <p className="text-xs font-bold text-slate-400 uppercase mb-4">{r.author || 'Autor desconhecido'}</p>
                             <p className="text-slate-600 text-sm italic line-clamp-4 flex-1">"{r.review}"</p>
                             
                             <div className="mt-8 pt-6 border-t border-slate-50 flex justify-between items-center">
@@ -377,11 +390,18 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                                     <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-indigo-600">{r.userName.charAt(0)}</div>
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{r.userName}</span>
                                 </div>
-                                {view === 'community' && r.userId !== user.id && (
-                                    <button onClick={() => handleAddToShelf(r)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="Adicionar à minha estante">
-                                        <BookPlus className="w-4 h-4" />
-                                    </button>
-                                )}
+                                <div className="flex gap-2">
+                                    {r.userId === user.id && (
+                                        <button onClick={() => handleEditBook(r)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm" title="Editar este livro">
+                                            <Edit2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                    {view === 'community' && r.userId !== user.id && (
+                                        <button onClick={() => handleAddToShelf(r)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="Adicionar à minha estante">
+                                            <BookPlus className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ))}

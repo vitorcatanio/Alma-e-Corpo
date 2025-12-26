@@ -17,7 +17,6 @@ class StorageService {
     });
   }
 
-  // Changed from private to public to allow access from components like TrainerView.tsx to fetch summary data
   public getLocal<T>(key: string): T[] {
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
@@ -96,7 +95,6 @@ class StorageService {
     this.setLocal('diets', diets);
   }
 
-  // Melhora na recuperação do progresso para incluir nuvem
   async getProgress(userId: string): Promise<ProgressLog[]> { 
     const snapshot = await get(child(this.dbRef, `progress/${userId}`));
     if (snapshot.exists()) {
@@ -114,8 +112,6 @@ class StorageService {
     const progressRef = ref(database, `progress/${log.userId}/${log.id}`);
     await set(progressRef, log);
     this.setLocal('progress', [...this.getLocal<ProgressLog>('progress'), log]); 
-    
-    // Atualiza o peso no perfil principal se for o mais recente
     const profile = await this.getProfile(log.userId);
     if (profile) {
         profile.weight = log.weight;
@@ -160,8 +156,14 @@ class StorageService {
   }
   
   saveBookReview(review: BookReview) {
-    const reviews = this.getLocal<BookReview>('book_reviews');
-    this.setLocal('book_reviews', [review, ...reviews]);
+    let reviews = this.getLocal<BookReview>('book_reviews');
+    const index = reviews.findIndex(r => r.id === review.id);
+    if (index !== -1) {
+        reviews[index] = review;
+    } else {
+        reviews = [review, ...reviews];
+    }
+    this.setLocal('book_reviews', reviews);
   }
 
   addReviewComment(reviewId: string, comment: LibraryComment) {
@@ -203,16 +205,13 @@ class StorageService {
     if (profile) {
       if (!profile.readingStats) profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '' };
       const today = new Date().toISOString().split('T')[0];
-      
       if (profile.readingStats.lastReadDate !== today) {
         profile.readingStats.daysCompleted += 1;
         profile.readingStats.streak += 1;
         profile.readingStats.lastReadDate = today;
       }
-      
       profile.readingStats.totalChaptersRead += chaptersRead;
       if (profile.readingStats.totalChaptersRead > 1189) profile.readingStats.totalChaptersRead = 1189;
-
       profile.points = (profile.points || 0) + (chaptersRead * 10);
       await this.saveProfile(profile);
     }
