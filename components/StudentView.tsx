@@ -7,7 +7,7 @@ import {
     Flame, Send, Scale, Camera, Plus, BookOpen, 
     Quote, Sparkles, ChevronRight, Layers, X, Save, Loader2, ArrowLeft,
     MessageCircle, MessageSquare, Info, Star, Filter, SortAsc, BookPlus, Edit2, Medal, 
-    Check, ChevronDown, TrendingUp, ImageIcon, Sunrise, Sun, Coffee, Soup, Moon
+    Check, ChevronDown, TrendingUp, ImageIcon, Sunrise, Sun, Coffee, Soup, Moon, Ruler
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -70,7 +70,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
                     <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
                         <div className="relative z-10">
                             <h2 className="text-4xl font-black mb-2 text-white">Olá, {user.name.split(' ')[0]}</h2>
-                            <p className="text-slate-400 font-medium leading-relaxed">Sua mente governa, seu corpo obedece.</p>
+                            <p className="text-slate-400 font-medium leading-relaxed">Sua jornada é única. Cada passo conta.</p>
                         </div>
                         <Sparkles className="absolute right-10 top-10 w-24 h-24 text-white/5" />
                     </div>
@@ -90,7 +90,6 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
                             )}
                             <QuickActionBtn icon={Dumbbell} label="Ver Treino de Hoje" onClick={() => onTabChange('workouts')} color="text-indigo-600" />
                             <QuickActionBtn icon={BookOpen} label="Minha Leitura" onClick={() => onTabChange('spiritual')} color="text-amber-600" />
-                            {/* Comment: MessageCircle was missing from imports, fixed by adding it to the lucide-react import list */}
                             <QuickActionBtn icon={MessageCircle} label="Falar com Moderador" onClick={() => onTabChange('messages')} color="text-rose-600" />
                         </div>
                     </div>
@@ -125,6 +124,237 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 
 // --- SUB-VIEWS ---
 
+const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
+    const [isAdding, setIsAdding] = useState(false);
+    const [newLog, setNewLog] = useState({
+        weight: profile.weight || 0,
+        measurements: { waist: profile.measurements?.waist || 0, hips: profile.measurements?.hips || 0, arm: profile.measurements?.arm || 0, leg: profile.measurements?.leg || 0 },
+        notes: '',
+        photoUrl: ''
+    });
+    const photoInputRef = useRef<HTMLInputElement>(null);
+
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => setNewLog({ ...newLog, photoUrl: reader.result as string });
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!newLog.weight) return alert("Peso é obrigatório para registrar sua evolução.");
+        const log: ProgressLog = {
+            id: Date.now().toString(),
+            userId: user.id,
+            date: new Date().toISOString(),
+            weight: newLog.weight,
+            measurements: newLog.measurements as any,
+            notes: newLog.notes,
+            photoUrl: newLog.photoUrl
+        };
+        await db.addProgress(log);
+        setIsAdding(false);
+        onUpdate();
+    };
+
+    return (
+        <div className="animate-fade-in pb-20 space-y-8">
+            <div className="flex justify-between items-center">
+                <button onClick={onBack} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors group">
+                    <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-slate-900 group-hover:text-white transition-all"><ArrowLeft className="w-4 h-4"/></div> 
+                    Voltar ao Início
+                </button>
+                {!isAdding && (
+                    <button onClick={() => setIsAdding(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 shadow-xl hover:scale-105 transition-all">
+                        <Plus className="w-5 h-5" /> Novo Registro de Evolução
+                    </button>
+                )}
+            </div>
+
+            {isAdding ? (
+                <div className="bg-white p-8 md:p-12 rounded-[3rem] border border-slate-100 shadow-2xl space-y-8 animate-slide-up">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-3xl font-black text-slate-900">Registrar Evolução</h2>
+                        <button onClick={() => setIsAdding(false)} className="text-slate-300 hover:text-slate-900"><X /></button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                        {/* Foto de Progresso */}
+                        <div className="space-y-6">
+                            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Foto da Evolução</label>
+                            <div 
+                                onClick={() => photoInputRef.current?.click()}
+                                className="aspect-[4/5] bg-slate-50 rounded-[2.5rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center cursor-pointer hover:bg-white hover:border-indigo-200 transition-all overflow-hidden group"
+                            >
+                                {newLog.photoUrl ? (
+                                    <img src={newLog.photoUrl} className="w-full h-full object-cover" alt="Preview" />
+                                ) : (
+                                    <>
+                                        <div className="p-6 bg-white rounded-3xl shadow-sm mb-4 group-hover:scale-110 transition-transform">
+                                            <ImageIcon className="w-10 h-10 text-slate-300" />
+                                        </div>
+                                        <p className="text-sm font-bold text-slate-400">Clique para carregar foto</p>
+                                    </>
+                                )}
+                                <input ref={photoInputRef} type="file" className="hidden" accept="image/*" onChange={handlePhotoChange} />
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-medium text-center italic">Dica: Tente tirar a foto no mesmo lugar e iluminação para comparar melhor.</p>
+                        </div>
+
+                        {/* Dados e Medidas */}
+                        <div className="space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="col-span-full">
+                                    <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3 flex items-center gap-2"><Scale className="w-4 h-4 text-indigo-500" /> Peso Atual (kg)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-sm"
+                                        value={newLog.weight}
+                                        onChange={e => setNewLog({ ...newLog, weight: parseFloat(e.target.value) })}
+                                    />
+                                </div>
+
+                                <div className="space-y-6 col-span-full">
+                                    <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Ruler className="w-4 h-4 text-emerald-500" /> Circunferências (cm)</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <MeasurementInput label="Cintura" value={newLog.measurements.waist} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, waist: v } })} />
+                                        <MeasurementInput label="Quadril" value={newLog.measurements.hips} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, hips: v } })} />
+                                        <MeasurementInput label="Braço" value={newLog.measurements.arm} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, arm: v } })} />
+                                        <MeasurementInput label="Perna" value={newLog.measurements.leg} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, leg: v } })} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3">Relato de Mudança</label>
+                                <textarea 
+                                    placeholder="Ex: Senti que minha calça jeans está mais folgada hoje. Dormi melhor e tive mais disposição no treino."
+                                    className="w-full h-32 p-5 bg-slate-50 rounded-2xl font-medium outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all resize-none shadow-sm"
+                                    value={newLog.notes}
+                                    onChange={e => setNewLog({ ...newLog, notes: e.target.value })}
+                                />
+                            </div>
+
+                            <button onClick={handleSave} className="w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xl shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
+                                <Save className="w-6 h-6" /> Salvar Minha Evolução
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-8">
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6">
+                        <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600">
+                            <TrendingUp className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black text-slate-900">Histórico de Transformação</h2>
+                            <p className="text-slate-400 font-medium">Veja o quanto você já caminhou. O esforço recompensa.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                        {progress.length === 0 ? (
+                            <div className="col-span-full py-24 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
+                                <Camera className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                <p className="text-slate-400 font-bold italic">Sua linha do tempo está esperando. Registre sua primeira evolução!</p>
+                            </div>
+                        ) : progress.map((log: ProgressLog) => (
+                            <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all">
+                                {log.photoUrl ? (
+                                    <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100 relative">
+                                        <img src={log.photoUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Progresso" />
+                                        <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md text-white px-3 py-1 rounded-full text-[10px] font-black">
+                                            {new Date(log.date).toLocaleDateString('pt-BR')}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="aspect-[4/3] w-full bg-slate-50 flex items-center justify-center text-slate-200">
+                                        <ImageIcon className="w-12 h-12" />
+                                    </div>
+                                )}
+                                <div className="p-8 space-y-6">
+                                    <div className="flex justify-between items-end border-b border-slate-50 pb-4">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Peso Registrado</p>
+                                            <p className="text-3xl font-black text-slate-900">{log.weight} <span className="text-sm font-bold text-slate-300">kg</span></p>
+                                        </div>
+                                        <div className="text-right">
+                                             <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Status</p>
+                                             <CheckCircle className="w-6 h-6 text-emerald-400 ml-auto" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
+                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter mb-1">Cintura</p>
+                                            <p className="font-black text-slate-700 text-lg">{log.measurements?.waist || '-'} <span className="text-[10px]">cm</span></p>
+                                        </div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
+                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter mb-1">Quadril</p>
+                                            <p className="font-black text-slate-700 text-lg">{log.measurements?.hips || '-'} <span className="text-[10px]">cm</span></p>
+                                        </div>
+                                    </div>
+
+                                    {log.notes && (
+                                        <div className="relative pt-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-50">
+                                            <Quote className="absolute -top-1 -right-1 w-6 h-6 text-indigo-100" />
+                                            <p className="text-xs text-slate-600 font-medium italic relative z-10 line-clamp-4 leading-relaxed">"{log.notes}"</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const MeasurementInput = ({ label, value, onChange }: any) => (
+    <div>
+        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1.5 ml-1">{label}</label>
+        <input 
+            type="number" 
+            className="w-full p-4 bg-slate-50 rounded-xl font-bold text-slate-900 outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-sm"
+            value={value || ''}
+            onChange={e => onChange(parseFloat(e.target.value))}
+        />
+    </div>
+);
+
+const ChatView = ({ user, trainer, onMessageSent }: any) => {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [input, setInput] = useState('');
+    useEffect(() => { if (trainer) { setMessages(db.getMessages(user.id, trainer.id)); } }, [trainer, user.id]);
+    return (
+        <div className="bg-white h-[70vh] rounded-[3rem] border border-slate-100 flex flex-col overflow-hidden shadow-sm">
+            <div className="p-8 border-b font-black flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 rounded-xl text-white flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5" />
+                </div> 
+                Moderador Treyo
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30 custom-scrollbar">
+                {messages.map(m => (
+                    <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] p-6 rounded-[2rem] text-sm ${m.senderId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'}`}>
+                            {m.content}
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className="p-8 flex gap-4">
+                <input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Envie uma dúvida para o moderador..." value={input} onChange={e => setInput(e.target.value)} />
+                <button onClick={() => { if(input && trainer) { db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all"><Send /></button>
+            </div>
+        </div>
+    );
+};
+
 const BIBLE_STRUCTURE: Record<string, number> = {
     'Gênesis': 50, 'Êxodo': 40, 'Levítico': 27, 'Números': 36, 'Deuteronômio': 34,
     'Josué': 24, 'Juízes': 21, 'Rute': 4, '1 Samuel': 31, '2 Samuel': 24,
@@ -149,193 +379,6 @@ const BIBLE_PLANS: ReadingPlan[] = [
     { id: 'sabedoria', name: 'Salmos & Provérbios', category: 'Sabedoria', description: 'Um capítulo de Salmos e Provérbios por dia.', books: ['Salmos', 'Provérbios'] },
     { id: 'essencial', name: 'Essenciais da Fé', category: 'Temático', description: 'Passagens chave sobre a caminhada cristã.', books: ['João', 'Romanos', 'Efésios'] }
 ];
-
-const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
-    const [isAdding, setIsAdding] = useState(false);
-    const [newLog, setNewLog] = useState({
-        weight: profile.weight || 0,
-        measurements: { ...profile.measurements },
-        notes: '',
-        photoUrl: ''
-    });
-    const photoInputRef = useRef<HTMLInputElement>(null);
-
-    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setNewLog({ ...newLog, photoUrl: reader.result as string });
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleSave = async () => {
-        if (!newLog.weight) return alert("Peso é obrigatório.");
-        const log: ProgressLog = {
-            id: Date.now().toString(),
-            userId: user.id,
-            date: new Date().toISOString(),
-            weight: newLog.weight,
-            measurements: newLog.measurements,
-            notes: newLog.notes,
-            photoUrl: newLog.photoUrl
-        };
-        await db.addProgress(log);
-        setIsAdding(false);
-        onUpdate();
-    };
-
-    return (
-        <div className="animate-fade-in pb-20 space-y-8">
-            <div className="flex justify-between items-center">
-                <button onClick={onBack} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors group">
-                    <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-slate-900 group-hover:text-white transition-all"><ArrowLeft className="w-4 h-4"/></div> 
-                    Voltar ao Início
-                </button>
-                {!isAdding && (
-                    <button onClick={() => setIsAdding(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 shadow-xl hover:scale-105 transition-all">
-                        <Plus className="w-5 h-5" /> Novo Registro
-                    </button>
-                )}
-            </div>
-
-            {isAdding ? (
-                <div className="bg-white p-8 md:p-12 rounded-[3rem] border border-slate-100 shadow-2xl space-y-8 animate-slide-up">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-3xl font-black text-slate-900">Registrar Evolução</h2>
-                        <button onClick={() => setIsAdding(false)} className="text-slate-300 hover:text-slate-900"><X /></button>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                        <div className="space-y-6">
-                            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Foto de Hoje</label>
-                            <div 
-                                onClick={() => photoInputRef.current?.click()}
-                                className="aspect-[4/5] bg-slate-50 rounded-[2.5rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center cursor-pointer hover:bg-white hover:border-indigo-200 transition-all overflow-hidden group"
-                            >
-                                {newLog.photoUrl ? (
-                                    <img src={newLog.photoUrl} className="w-full h-full object-cover" alt="Preview" />
-                                ) : (
-                                    <>
-                                        <div className="p-6 bg-white rounded-3xl shadow-sm mb-4 group-hover:scale-110 transition-transform">
-                                            <ImageIcon className="w-10 h-10 text-slate-300" />
-                                        </div>
-                                        <p className="text-sm font-bold text-slate-400">Clique para carregar foto</p>
-                                    </>
-                                )}
-                                <input ref={photoInputRef} type="file" className="hidden" accept="image/*" onChange={handlePhotoChange} />
-                            </div>
-                        </div>
-
-                        <div className="space-y-8">
-                            <div>
-                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3">Peso Atual (kg)</label>
-                                <input 
-                                    type="number" 
-                                    className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all"
-                                    value={newLog.weight}
-                                    onChange={e => setNewLog({ ...newLog, weight: parseFloat(e.target.value) })}
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <MeasurementInput label="Cintura (cm)" value={newLog.measurements.waist} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, waist: v } })} />
-                                <MeasurementInput label="Quadril (cm)" value={newLog.measurements.hips} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, hips: v } })} />
-                                <MeasurementInput label="Braço (cm)" value={newLog.measurements.arm} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, arm: v } })} />
-                                <MeasurementInput label="Perna (cm)" value={newLog.measurements.leg} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, leg: v } })} />
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-3">O que você percebeu hoje?</label>
-                                <textarea 
-                                    placeholder="Ex: Roupas mais largas, mais energia no dia a dia, melhor qualidade de sono..."
-                                    className="w-full h-32 p-5 bg-slate-50 rounded-2xl font-medium outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all resize-none"
-                                    value={newLog.notes}
-                                    onChange={e => setNewLog({ ...newLog, notes: e.target.value })}
-                                />
-                            </div>
-
-                            <button onClick={handleSave} className="w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xl shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
-                                <Save className="w-6 h-6" /> Salvar Minha Evolução
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                <div className="space-y-8">
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-6">
-                        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                            <TrendingUp className="w-8 h-8" />
-                        </div>
-                        <div>
-                            <h2 className="text-2xl font-black text-slate-900">Linha do Tempo</h2>
-                            <p className="text-slate-400 font-medium">Acompanhe visualmente sua transformação física.</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-                        {progress.length === 0 ? (
-                            <div className="col-span-full py-24 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
-                                <Camera className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                                <p className="text-slate-400 font-bold italic">Nenhum registro ainda. Comece sua jornada!</p>
-                            </div>
-                        ) : progress.map((log: ProgressLog) => (
-                            <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all">
-                                {log.photoUrl && (
-                                    <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100 relative">
-                                        <img src={log.photoUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Progresso" />
-                                        <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md text-white px-3 py-1 rounded-full text-[10px] font-black">
-                                            {new Date(log.date).toLocaleDateString('pt-BR')}
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="p-8 space-y-6">
-                                    <div className="flex justify-between items-end border-b border-slate-50 pb-4">
-                                        <div>
-                                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Peso</p>
-                                            <p className="text-3xl font-black text-slate-900">{log.weight} kg</p>
-                                        </div>
-                                        <Scale className="w-8 h-8 text-indigo-100" />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-slate-50 p-3 rounded-2xl">
-                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Cintura</p>
-                                            <p className="font-black text-slate-700">{log.measurements?.waist || '-'} cm</p>
-                                        </div>
-                                        <div className="bg-slate-50 p-3 rounded-2xl">
-                                            <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Quadril</p>
-                                            <p className="font-black text-slate-700">{log.measurements?.hips || '-'} cm</p>
-                                        </div>
-                                    </div>
-
-                                    {log.notes && (
-                                        <div className="relative pt-4">
-                                            <Quote className="absolute -top-1 -left-1 w-6 h-6 text-slate-100" />
-                                            <p className="text-sm text-slate-500 font-medium italic relative z-10 line-clamp-3">"{log.notes}"</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const MeasurementInput = ({ label, value, onChange }: any) => (
-    <div>
-        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1.5 ml-1">{label}</label>
-        <input 
-            type="number" 
-            className="w-full p-4 bg-slate-50 rounded-xl font-bold text-slate-900 outline-none focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-sm"
-            value={value || ''}
-            onChange={e => onChange(parseFloat(e.target.value))}
-        />
-    </div>
-);
 
 const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }: any) => {
     const [view, setView] = useState<'plans' | 'active'>('plans');
@@ -498,35 +541,6 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    );
-};
-
-const ChatView = ({ user, trainer, onMessageSent }: any) => {
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [input, setInput] = useState('');
-    useEffect(() => { if (trainer) { setMessages(db.getMessages(user.id, trainer.id)); } }, [trainer, user.id]);
-    return (
-        <div className="bg-white h-[70vh] rounded-[3rem] border border-slate-100 flex flex-col overflow-hidden shadow-sm">
-            <div className="p-8 border-b font-black flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-600 rounded-xl text-white flex items-center justify-center">
-                    <CheckCircle className="w-5 h-5" />
-                </div> 
-                Moderador
-            </div>
-            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30 custom-scrollbar">
-                {messages.map(m => (
-                    <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] p-6 rounded-[2rem] text-sm ${m.senderId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'}`}>
-                            {m.content}
-                        </div>
-                    </div>
-                ))}
-            </div>
-            <div className="p-8 flex gap-4">
-                <input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Escreva para o moderador..." value={input} onChange={e => setInput(e.target.value)} />
-                <button onClick={() => { if(input && trainer) { db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all"><Send /></button>
             </div>
         </div>
     );

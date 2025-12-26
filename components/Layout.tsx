@@ -73,7 +73,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const filteredItems = role === UserRole.STUDENT 
     ? studentNavItems.filter(item => {
         if (item.needsFitness) {
-            // Só mostra a aba de Evolução se o usuário marcou que quer perder peso/foco físico no onboarding
+            // Só mostra a aba de Evolução se o usuário marcou foco físico (wantsWeightLoss)
             return profile?.onboardingChoices?.wantsWeightLoss === true;
         }
         return true;
@@ -127,7 +127,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
             <div>
                 <h1 className="text-2xl font-black tracking-tighter text-slate-900">TREYO</h1>
-                <p className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold">Corpo & Alma</p>
+                <p className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold">Ecossistema Humano</p>
             </div>
           </div>
           
@@ -139,7 +139,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 <div className="overflow-hidden flex-1">
                     <p className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600">{user.name}</p>
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-tighter">
-                        {role === UserRole.TRAINER ? 'Personal Master' : 'Amigo Platinum'}
+                        {role === UserRole.TRAINER ? 'Moderador Master' : 'Amigo Platinum'}
                     </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-all mr-1" />
