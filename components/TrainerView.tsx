@@ -91,18 +91,22 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
 
     const handleSaveDiet = async () => {
         if (!selectedStudent) return;
-        await db.saveDiet({
-            id: Date.now().toString(),
-            userId: selectedStudent.id,
-            trainerId: user.id,
-            macros: dietMacros,
-            content: "Plano estruturado de refeições",
-            meals: meals,
-            guidelines: dietGuidelines,
-            updatedAt: new Date().toISOString()
-        });
-        alert('Dieta salva e sincronizada!');
-        setBuilderState('manage');
+        try {
+            await db.saveDiet({
+                id: Date.now().toString(),
+                userId: selectedStudent.id,
+                trainerId: user.id,
+                macros: dietMacros,
+                content: "Plano estruturado de refeições",
+                meals: meals,
+                guidelines: dietGuidelines,
+                updatedAt: new Date().toISOString()
+            });
+            alert('Dieta salva e sincronizada para o aluno!');
+            setBuilderState('manage');
+        } catch (e) {
+            alert('Erro ao salvar dieta. Verifique sua conexão.');
+        }
     };
 
     if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600" /></div>;
@@ -198,11 +202,11 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                                             <span className="text-sm font-black text-indigo-600">{new Date(log.date).toLocaleDateString()}</span>
                                             <span className="text-xl font-black">{log.weight}kg</span>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="grid grid-cols-2 gap-2 text-xs text-left">
                                             <div className="p-2 bg-slate-50 rounded-lg">Cintura: {log.measurements?.waist}cm</div>
                                             <div className="p-2 bg-slate-50 rounded-lg">Quadril: {log.measurements?.hips}cm</div>
                                         </div>
-                                        {log.notes && <p className="text-xs text-slate-500 italic">"{log.notes}"</p>}
+                                        {log.notes && <p className="text-xs text-slate-500 italic text-left">"{log.notes}"</p>}
                                     </div>
                                 </div>
                             ))}
@@ -211,24 +215,42 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                  );
             }
 
-            if (builderState === 'diet') {
+            if (builderState === 'diet' && selectedStudent) {
                 return (
                     <div className="space-y-8 animate-fade-in pb-20">
                         <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
-                        <h2 className="text-2xl font-black">Plano Alimentar Sincronizado</h2>
-                        {/* Reutilizando lógica de MealEditor e MacroInput */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <h2 className="text-2xl font-black text-slate-900">Plano Alimentar para {selectedStudent.name}</h2>
+                            <button onClick={handleSaveDiet} className="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl hover:bg-emerald-700 transition-all"><Save /> Salvar e Enviar</button>
+                        </div>
+                        
                         <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm">
+                            <h3 className="text-xs font-black uppercase text-slate-400 mb-6 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-500" /> Metas de Macronutrientes</h3>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <MacroInput label="Kcal" value={dietMacros.calories} onChange={(v:number) => setDietMacros({...dietMacros, calories: v})} />
-                                <MacroInput label="Proteína" value={dietMacros.protein} onChange={(v:number) => setDietMacros({...dietMacros, protein: v})} />
-                                <MacroInput label="Carbo" value={dietMacros.carbs} onChange={(v:number) => setDietMacros({...dietMacros, carbs: v})} />
-                                <MacroInput label="Gordura" value={dietMacros.fats} onChange={(v:number) => setDietMacros({...dietMacros, fats: v})} />
+                                <MacroInput label="Kcal Diárias" value={dietMacros.calories} onChange={(v:number) => setDietMacros({...dietMacros, calories: v})} />
+                                <MacroInput label="Proteína (g)" value={dietMacros.protein} onChange={(v:number) => setDietMacros({...dietMacros, protein: v})} />
+                                <MacroInput label="Carbo (g)" value={dietMacros.carbs} onChange={(v:number) => setDietMacros({...dietMacros, carbs: v})} />
+                                <MacroInput label="Gordura (g)" value={dietMacros.fats} onChange={(v:number) => setDietMacros({...dietMacros, fats: v})} />
                             </div>
                         </div>
-                        <MealEditor label="Café da Manhã" icon={Sunrise} color="text-amber-500" value={meals.breakfast} onChange={(v:string) => setMeals({...meals, breakfast: v})} />
-                        <MealEditor label="Almoço" icon={Sun} color="text-indigo-500" value={meals.lunch} onChange={(v:string) => setMeals({...meals, lunch: v})} />
-                        <MealEditor label="Jantar" icon={Soup} color="text-rose-500" value={meals.dinner} onChange={(v:string) => setMeals({...meals, dinner: v})} />
-                        <button onClick={handleSaveDiet} className="w-full bg-emerald-600 text-white py-6 rounded-2xl font-black text-xl flex items-center justify-center gap-3"><Save /> Salvar e Enviar</button>
+
+                        <div className="space-y-6">
+                            <MealEditor label="Café da Manhã" icon={Sunrise} color="text-amber-500" value={meals.breakfast} onChange={(v:string) => setMeals({...meals, breakfast: v})} />
+                            <MealEditor label="Almoço" icon={Sun} color="text-indigo-500" value={meals.lunch} onChange={(v:string) => setMeals({...meals, lunch: v})} />
+                            <MealEditor label="Lanche" icon={Coffee} color="text-orange-500" value={meals.snack} onChange={(v:string) => setMeals({...meals, snack: v})} />
+                            <MealEditor label="Jantar" icon={Soup} color="text-rose-500" value={meals.dinner} onChange={(v:string) => setMeals({...meals, dinner: v})} />
+                            <MealEditor label="Ceia" icon={Moon} color="text-slate-900" value={meals.supper} onChange={(v:string) => setMeals({...meals, supper: v})} />
+                        </div>
+                        
+                        <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm">
+                            <label className="text-xs font-black uppercase text-slate-400 block mb-4 ml-1">Orientações Extras</label>
+                            <textarea 
+                                className="w-full min-h-[120px] p-5 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 resize-none" 
+                                placeholder="Ex: Beber 3 litros de água, evitar refrigerantes..."
+                                value={dietGuidelines}
+                                onChange={e => setDietGuidelines(e.target.value)}
+                            />
+                        </div>
                     </div>
                 );
             }
@@ -262,7 +284,7 @@ const MacroInput = ({ label, value, onChange }: any) => (
 
 const MealEditor = ({ icon: Icon, label, color, value, onChange }: any) => (
     <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6 text-left">
-        <div className="flex items-center gap-4 md:w-48"><div className={`p-3 rounded-xl bg-slate-50 ${color}`}><Icon className="w-6 h-6" /></div><span className="font-black text-slate-900">{label}</span></div>
+        <div className="flex items-center gap-4 md:w-48 shrink-0"><div className={`p-3 rounded-xl bg-slate-50 ${color}`}><Icon className="w-6 h-6" /></div><span className="font-black text-slate-900">{label}</span></div>
         <textarea className="flex-1 min-h-[100px] p-4 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 resize-none" placeholder={`Prescreva o ${label.toLowerCase()}...`} value={value} onChange={e => onChange(e.target.value)} />
     </div>
 );
@@ -305,7 +327,7 @@ const TrainerChatView = ({ students, user }: { students: User[], user: User }) =
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic"><MessageCircle className="w-16 h-16 opacity-10" /><p>Selecione um aluno para conversar.</p></div>
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic text-center p-10"><MessageCircle className="w-16 h-16 opacity-10" /><p>Selecione um Amigo Platinum para conversar e fornecer suporte.</p></div>
                 )}
             </div>
         </div>

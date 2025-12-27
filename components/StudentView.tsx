@@ -50,28 +50,34 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
     const [loading, setLoading] = useState(true);
     
     const loadData = async () => {
-        const allUsers = await db.getAllUsersFromDb();
-        const foundTrainer = allUsers.find(u => u.role === 'trainer');
-        const p = await db.getProfile(user.id);
-        const l = await db.getReadingLeaderboard();
-        const w = await db.getWorkouts(user.id);
-        const d = await db.getDiet(user.id);
-        const c = await db.getCommunityPosts();
-        const prog = await db.getProgress(user.id);
-        
-        setTrainer(foundTrainer);
-        setProfile(p);
-        setLeaderboard(l);
-        setWorkouts(w);
-        setDiet(d);
-        setCommunityPosts(c);
-        setProgress(prog);
-        setLoading(false);
+        try {
+            const allUsers = await db.getAllUsersFromDb();
+            const foundTrainer = allUsers.find(u => u.role === 'trainer');
+            const p = await db.getProfile(user.id);
+            const l = await db.getReadingLeaderboard();
+            const w = await db.getWorkouts(user.id);
+            const d = await db.getDiet(user.id);
+            const c = await db.getCommunityPosts();
+            const prog = await db.getProgress(user.id);
+            
+            setTrainer(foundTrainer);
+            setProfile(p);
+            setLeaderboard(l);
+            setWorkouts(w);
+            setDiet(d);
+            setCommunityPosts(c);
+            setProgress(prog);
+        } catch (e) {
+            console.error("Erro ao sincronizar dados:", e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(loadData, 15000); 
+        // Polling mais frequente para garantir sincronia entre dispositivos
+        const interval = setInterval(loadData, 5000); 
         return () => clearInterval(interval);
     }, [user.id, activeTab]);
 
@@ -130,7 +136,8 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
             return <EvolutionView progress={progress} user={user} profile={profile} onUpdate={loadData} onBack={() => onTabChange('dashboard')} />;
 
         case 'library':
-            return <div className="space-y-6 pb-20"><BackButton /><LibraryView user={user} profile={profile} onUpdate={loadData} /></div>;
+            // Pass activeTab to LibraryView component
+            return <div className="space-y-6 pb-20"><BackButton /><LibraryView user={user} profile={profile} onUpdate={loadData} activeTab={activeTab} /></div>;
 
         case 'spiritual':
             return <div className="space-y-6 pb-20"><BackButton /><SpiritualView user={user} profile={profile} leaderboard={leaderboard} onUpdate={loadData} /></div>;
@@ -148,7 +155,8 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 
 // --- SUB-VIEWS ---
 
-const LibraryView = ({ user, profile, onUpdate }: any) => {
+// Add activeTab to props list
+const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
     const [view, setView] = useState<'shelf' | 'community' | 'add'>('shelf');
     const [sortBy, setSortBy] = useState<'title' | 'author' | 'category'>('title');
     const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -170,10 +178,13 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
 
     useEffect(() => {
         loadReviews();
-    }, [view]);
+    }, [view, activeTab]); // Recarrega quando mudar de aba ou visualização
 
     const filteredReviews = allReviews
-        .filter(r => view === 'shelf' ? r.userId === user.id : true)
+        .filter(r => {
+            if (view === 'shelf') return r.userId === user.id;
+            return true; // Comunidade mostra TODOS
+        })
         .filter(r => {
             if (filterCategory === 'all') return true;
             return (r.category || 'Outros') === filterCategory;
@@ -202,7 +213,7 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
         await db.saveBookReview(reviewData);
         setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 });
         setView('shelf');
-        loadReviews();
+        await loadReviews();
         onUpdate();
     };
 
@@ -273,13 +284,13 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                             <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
                             <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoria</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Categoria</label>
                                 <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.category} onChange={e => setNewBook({...newBook, category: e.target.value})}>
                                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Avaliação</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Avaliação</label>
                                 <div className="flex gap-2 bg-slate-50 p-4 rounded-2xl">
                                     {[1,2,3,4,5].map(s => (
                                         <button key={s} onClick={() => setNewBook({...newBook, rating: s})} className={`transition-all ${s <= newBook.rating ? 'text-amber-400 scale-110' : 'text-slate-200'}`}><Star className="fill-current w-6 h-6" /></button>
@@ -577,7 +588,13 @@ const WorkoutView = ({ workouts }: any) => {
 
 const DietView = ({ diet }: any) => {
     if (!diet) return <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100"><Utensils className="w-16 h-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-400 font-bold">Plano alimentar em preparo.</p></div>;
-    const mealList = [{ id: 'breakfast', label: 'Café da Manhã', icon: Sunrise, color: 'text-amber-500' }, { id: 'lunch', label: 'Almoço', icon: Sun, color: 'text-indigo-500' }, { id: 'snack', label: 'Café da Tarde', icon: Coffee, color: 'text-orange-500' }, { id: 'dinner', label: 'Jantar', icon: Soup, color: 'text-rose-500' }, { id: 'supper', label: 'Ceia', icon: Moon, color: 'text-slate-900' }];
+    const mealList = [
+        { id: 'breakfast', label: 'Café da Manhã', icon: Sunrise, color: 'text-amber-500' }, 
+        { id: 'lunch', label: 'Almoço', icon: Sun, color: 'text-indigo-500' }, 
+        { id: 'snack', label: 'Lanche', icon: Coffee, color: 'text-orange-500' }, 
+        { id: 'dinner', label: 'Jantar', icon: Soup, color: 'text-rose-500' }, 
+        { id: 'supper', label: 'Ceia', icon: Moon, color: 'text-slate-900' }
+    ];
     return (
         <div className="space-y-10 animate-fade-in">
             <h2 className="text-4xl font-black text-slate-900">Alimentação</h2>
@@ -594,7 +611,7 @@ const DietView = ({ diet }: any) => {
                     return (
                         <div key={m.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6 hover:shadow-md transition-all">
                             <div className="flex items-center gap-4 md:w-56 shrink-0"><div className={`p-4 rounded-2xl bg-slate-50 ${m.color}`}><m.icon className="w-7 h-7" /></div><div><h4 className="font-black text-slate-900 text-lg leading-tight">{m.label}</h4><p className="text-[10px] font-black uppercase text-slate-300">Prescrito</p></div></div>
-                            <div className="flex-1 bg-slate-50/50 p-6 rounded-3xl border border-slate-50"><p className="text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{content}</p></div>
+                            <div className="flex-1 bg-slate-50/50 p-6 rounded-3xl border border-slate-50 text-left"><p className="text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{content}</p></div>
                         </div>
                     );
                 })}
