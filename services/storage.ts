@@ -1,47 +1,23 @@
 
-import { ref, set, get, child, remove, update } from "firebase/database";
+import { ref, set, get, child, push, update, remove } from "firebase/database";
 import { database } from "../firebase-config";
-import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, BookReview, WishlistBook, LibraryComment, SpiritualPost, CommunityPost } from '../types';
+import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, UserRole, SportType, ActivityLog, ChatMessage, CalendarEvent, BookReview, CommunityPost } from '../types';
 
 class StorageService {
   private dbRef = ref(database);
 
   init() {
-    const keys = [
-      'profiles', 'users', 'workouts', 'diets', 'progress', 'activity', 
-      'messages', 'events', 'spiritual_posts', 'book_reviews', 
-      'book_wishlist', 'community_posts'
-    ];
-    keys.forEach(key => {
-        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify([]));
-    });
+    // Não precisamos mais inicializar chaves no localStorage
   }
 
-  public getLocal<T>(key: string): T[] {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-  }
-
-  private setLocal<T>(key: string, data: T[]) {
-    localStorage.setItem(key, JSON.stringify(data));
-  }
-
+  // --- USUÁRIOS E PERFIS ---
   async getAllUsersFromDb(): Promise<User[]> {
     const snapshot = await get(child(this.dbRef, 'users'));
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const users = Object.values(data) as User[];
-      this.setLocal('users', users);
-      return users;
-    }
-    return [];
+    return snapshot.exists() ? Object.values(snapshot.val()) as User[] : [];
   }
 
   async saveUserToDb(user: User) {
     await set(ref(database, 'users/' + user.id), user);
-    const users = this.getLocal<User>('users').filter(u => u.id !== user.id);
-    users.push(user);
-    this.setLocal('users', users);
   }
 
   async getUserFromDb(userId: string): Promise<User | null> {
@@ -52,58 +28,50 @@ class StorageService {
   async saveProfile(profile: UserProfile) {
     if (!profile.userId) return;
     await set(ref(database, 'profiles/' + profile.userId), profile);
-    const localProfiles = this.getLocal<UserProfile>('profiles').filter(p => p.userId !== profile.userId);
-    localProfiles.push(profile);
-    this.setLocal('profiles', localProfiles);
   }
 
   async getProfile(userId: string): Promise<UserProfile | undefined> {
     const snapshot = await get(child(this.dbRef, `profiles/${userId}`));
-    if (snapshot.exists()) {
-      return snapshot.val() as UserProfile;
-    }
-    return this.getLocal<UserProfile>('profiles').find(p => p.userId === userId);
+    return snapshot.exists() ? snapshot.val() as UserProfile : undefined;
   }
 
-  updateUser(updatedUser: Partial<User>) {
-    const users = this.getLocal<User>('users');
-    const index = users.findIndex(u => u.id === updatedUser.id);
-    if (index !== -1) {
-      users[index] = { ...users[index], ...updatedUser };
-      this.setLocal('users', users);
-      if (updatedUser.id) set(ref(database, 'users/' + updatedUser.id), users[index]);
-    }
+  async updateUser(updatedUser: Partial<User>) {
+    if (!updatedUser.id) return;
+    await update(ref(database, 'users/' + updatedUser.id), updatedUser);
   }
 
-  getWorkouts(userId: string): WorkoutPlan[] { return this.getLocal<WorkoutPlan>('workouts').filter(w => w.userId === userId); }
-  saveWorkout(workout: WorkoutPlan) {
-    let workouts = this.getLocal<WorkoutPlan>('workouts');
-    const index = workouts.findIndex(w => w.id === workout.id);
-    if (index >= 0) workouts[index] = workout;
-    else workouts.push(workout);
-    this.setLocal('workouts', workouts);
+  // --- TREINOS ---
+  async getWorkouts(userId: string): Promise<WorkoutPlan[]> {
+    const snapshot = await get(child(this.dbRef, `workouts/${userId}`));
+    return snapshot.exists() ? Object.values(snapshot.val()) as WorkoutPlan[] : [];
   }
 
-  getDiet(userId: string): DietPlan | undefined { return this.getLocal<DietPlan>('diets').find(d => d.userId === userId); }
-  saveDiet(diet: DietPlan) {
-    const diets = this.getLocal<DietPlan>('diets').filter(d => d.userId !== diet.userId);
-    diets.push(diet);
-    this.setLocal('diets', diets);
+  async saveWorkout(workout: WorkoutPlan) {
+    await set(ref(database, `workouts/${workout.userId}/${workout.id}`), workout);
   }
 
+  // --- DIETAS ---
+  async getDiet(userId: string): Promise<DietPlan | undefined> {
+    const snapshot = await get(child(this.dbRef, `diets/${userId}`));
+    return snapshot.exists() ? snapshot.val() as DietPlan : undefined;
+  }
+
+  async saveDiet(diet: DietPlan) {
+    await set(ref(database, `diets/${diet.userId}`), diet);
+  }
+
+  // --- PROGRESSO/EVOLUÇÃO ---
   async getProgress(userId: string): Promise<ProgressLog[]> { 
     const snapshot = await get(child(this.dbRef, `progress/${userId}`));
     if (snapshot.exists()) {
-        const data = snapshot.val();
-        const logs = Object.values(data) as ProgressLog[];
+        const logs = Object.values(snapshot.val()) as ProgressLog[];
         return logs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     return [];
   }
 
   async addProgress(log: ProgressLog) { 
-    const progressRef = ref(database, `progress/${log.userId}/${log.id}`);
-    await set(progressRef, log);
+    await set(ref(database, `progress/${log.userId}/${log.id}`), log);
     const profile = await this.getProfile(log.userId);
     if (profile) {
         profile.weight = log.weight;
@@ -112,44 +80,53 @@ class StorageService {
     }
   }
 
-  getMessages(userId1: string, userId2: string): ChatMessage[] {
-    return this.getLocal<ChatMessage>('messages').filter(m => (m.senderId === userId1 && m.receiverId === userId2) || (m.senderId === userId2 && m.receiverId === userId1)).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  }
-  sendMessage(msg: ChatMessage) { this.setLocal('messages', [...this.getLocal<ChatMessage>('messages'), msg]); }
-
-  getEvents(trainerId: string): CalendarEvent[] {
-    return this.getLocal<CalendarEvent>('events').filter(e => e.trainerId === trainerId).sort((a,b) => a.date.localeCompare(b.date));
-  }
-  
-  // Fix: Added missing addEvent method to StorageService
-  addEvent(event: CalendarEvent) {
-    const events = this.getLocal<CalendarEvent>('events');
-    events.push(event);
-    this.setLocal('events', events);
+  // --- MENSAGENS (CHAT) ---
+  private getChatId(id1: string, id2: string) {
+    return [id1, id2].sort().join('_');
   }
 
-  // Fix: Added missing deleteEvent method to StorageService
-  deleteEvent(eventId: string) {
-    const events = this.getLocal<CalendarEvent>('events').filter(e => e.id !== eventId);
-    this.setLocal('events', events);
+  async getMessages(userId1: string, userId2: string): Promise<ChatMessage[]> {
+    const chatId = this.getChatId(userId1, userId2);
+    const snapshot = await get(child(this.dbRef, `messages/${chatId}`));
+    if (snapshot.exists()) {
+        const msgs = Object.values(snapshot.val()) as ChatMessage[];
+        return msgs.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    }
+    return [];
+  }
+
+  async sendMessage(msg: ChatMessage) {
+    const chatId = this.getChatId(msg.senderId, msg.receiverId);
+    await set(ref(database, `messages/${chatId}/${msg.id}`), msg);
+  }
+
+  // --- AGENDA/EVENTOS ---
+  async getEvents(trainerId: string): Promise<CalendarEvent[]> {
+    const snapshot = await get(child(this.dbRef, `events/${trainerId}`));
+    return snapshot.exists() ? Object.values(snapshot.val()) as CalendarEvent[] : [];
   }
   
+  async addEvent(event: CalendarEvent) {
+    await set(ref(database, `events/${event.trainerId}/${event.id}`), event);
+  }
+
+  async deleteEvent(trainerId: string, eventId: string) {
+    await remove(ref(database, `events/${trainerId}/${eventId}`));
+  }
+  
+  // --- LEITURA ESPIRITUAL ---
   async getReadingLeaderboard(): Promise<(UserProfile & { userName: string, avatarUrl?: string })[]> {
     const profilesSnapshot = await get(child(this.dbRef, 'profiles'));
     const usersSnapshot = await get(child(this.dbRef, 'users'));
-    
     if (!profilesSnapshot.exists()) return [];
-    
     const profilesData = profilesSnapshot.val();
     const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
-    
     const leaderboard = Object.values(profilesData).map((p: any) => ({
         ...p,
         userName: usersData[p.userId]?.name || 'Membro Treyo',
         avatarUrl: usersData[p.userId]?.avatarUrl || null,
         points: p.points || 0
     }));
-    
     return leaderboard.sort((a, b) => b.points - a.points);
   }
 
@@ -159,57 +136,52 @@ class StorageService {
       if (!profile.readingStats) {
         profile.readingStats = { daysCompleted: 0, totalChaptersRead: 0, streak: 0, lastReadDate: '', readChapters: [] };
       }
-      
       let chapters = profile.readingStats.readChapters ? [...profile.readingStats.readChapters] : [];
       const chapterID = `${book}-${chapter}`;
       const index = chapters.indexOf(chapterID);
-
-      if (index !== -1) {
-        chapters.splice(index, 1);
-      } else {
-        chapters.push(chapterID);
-      }
-
+      if (index !== -1) chapters.splice(index, 1);
+      else chapters.push(chapterID);
       profile.readingStats.readChapters = chapters;
       profile.readingStats.totalChaptersRead = chapters.length;
       profile.points = chapters.length * 10;
       profile.level = Math.floor(profile.points / 500) + 1;
-
       const today = new Date().toISOString().split('T')[0];
       if (profile.readingStats.lastReadDate !== today && index === -1) {
         profile.readingStats.streak = (profile.readingStats.streak || 0) + 1;
         profile.readingStats.lastReadDate = today;
       }
-
       await this.saveProfile(profile);
       return profile;
     }
     return null;
   }
 
-  getBookReviews(): BookReview[] {
-    return this.getLocal<BookReview>('book_reviews').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  // --- BIBLIOTECA (REVIEWS) ---
+  async getBookReviews(): Promise<BookReview[]> {
+    const snapshot = await get(child(this.dbRef, 'book_reviews'));
+    if (snapshot.exists()) {
+        const reviews = Object.values(snapshot.val()) as BookReview[];
+        return reviews.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }
+    return [];
   }
   
-  saveBookReview(review: BookReview) {
-    let reviews = this.getLocal<BookReview>('book_reviews');
-    const index = reviews.findIndex(r => r.id === review.id);
-    if (index !== -1) reviews[index] = review;
-    else reviews = [review, ...reviews];
-    this.setLocal('book_reviews', reviews);
+  async saveBookReview(review: BookReview) {
+    await set(ref(database, `book_reviews/${review.id}`), review);
   }
 
-  getSpiritualPosts(): SpiritualPost[] {
-    return this.getLocal<SpiritualPost>('spiritual_posts').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  // --- COMUNIDADE ---
+  async getCommunityPosts(): Promise<CommunityPost[]> {
+    const snapshot = await get(child(this.dbRef, 'community_posts'));
+    if (snapshot.exists()) {
+        const posts = Object.values(snapshot.val()) as CommunityPost[];
+        return posts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }
+    return [];
   }
 
-  getCommunityPosts(): CommunityPost[] {
-    return this.getLocal<CommunityPost>('community_posts').sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  }
-
-  addCommunityPost(post: CommunityPost) {
-    const posts = this.getLocal<CommunityPost>('community_posts');
-    this.setLocal('community_posts', [...posts, post]);
+  async addCommunityPost(post: CommunityPost) {
+    await set(ref(database, `community_posts/${post.id}`), post);
   }
 }
 

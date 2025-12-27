@@ -8,7 +8,7 @@ import {
     Trash2, Save, Loader2, ChevronRight, Scale, Clock, Timer, 
     Calendar as CalendarIcon, MessageCircle, TrendingUp, Camera, 
     CheckCircle, Info, LayoutDashboard, Send, Search, Coffee,
-    Sun, Sunrise, Moon, Soup
+    Sun, Sunrise, Moon, Soup, Ruler
 } from 'lucide-react';
 
 interface TrainerViewProps {
@@ -35,15 +35,9 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
     // Form States - Diet
     const [dietMacros, setDietMacros] = useState({ calories: 2000, protein: 150, carbs: 200, fats: 60 });
     const [meals, setMeals] = useState({
-        breakfast: '',
-        lunch: '',
-        snack: '',
-        dinner: '',
-        supper: ''
+        breakfast: '', lunch: '', snack: '', dinner: '', supper: ''
     });
     const [dietGuidelines, setDietGuidelines] = useState('');
-
-    const [eventForm, setEventForm] = useState<Partial<CalendarEvent>>({ title: '', date: '', time: '', type: 'training' });
 
     useEffect(() => {
         const load = async () => {
@@ -65,17 +59,10 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
         setSelectedStudent(student);
         const p = await db.getProfile(student.id);
         setSelectedProfile(p || null);
-        
-        const currentDiet = db.getDiet(student.id);
+        const currentDiet = await db.getDiet(student.id);
         if (currentDiet) {
             setDietMacros(currentDiet.macros);
-            setMeals(currentDiet.meals || {
-                breakfast: '',
-                lunch: '',
-                snack: '',
-                dinner: '',
-                supper: ''
-            });
+            setMeals(currentDiet.meals || { breakfast: '', lunch: '', snack: '', dinner: '', supper: '' });
             setDietGuidelines(currentDiet.guidelines || '');
         } else {
             setMeals({ breakfast: '', lunch: '', snack: '', dinner: '', supper: '' });
@@ -84,9 +71,9 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
         setBuilderState('manage');
     };
 
-    const handleSaveWorkout = () => {
+    const handleSaveWorkout = async () => {
         if (!selectedStudent) return;
-        db.saveWorkout({
+        await db.saveWorkout({
             id: Date.now().toString(),
             userId: selectedStudent.id,
             trainerId: user.id,
@@ -98,13 +85,13 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             estimatedCalories: 300,
             durationMinutes: 60
         });
-        alert('Treino salvo!');
+        alert('Treino salvo com sucesso no sistema!');
         setBuilderState('manage');
     };
 
-    const handleSaveDiet = () => {
+    const handleSaveDiet = async () => {
         if (!selectedStudent) return;
-        db.saveDiet({
+        await db.saveDiet({
             id: Date.now().toString(),
             userId: selectedStudent.id,
             trainerId: user.id,
@@ -114,54 +101,8 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             guidelines: dietGuidelines,
             updatedAt: new Date().toISOString()
         });
-        alert('Dieta salva com sucesso!');
+        alert('Dieta salva e sincronizada!');
         setBuilderState('manage');
-    };
-
-    const handleSaveEvent = () => {
-        if (!eventForm.title || !eventForm.date) return;
-        db.addEvent({
-            id: Date.now().toString(),
-            trainerId: user.id,
-            studentId: selectedStudent?.id,
-            title: eventForm.title!,
-            date: eventForm.date!,
-            time: eventForm.time || '08:00',
-            type: (eventForm.type as any) || 'training',
-            attendees: []
-        });
-        alert('Evento agendado!');
-        setEventForm({ title: '', date: '', time: '', type: 'training' });
-    };
-
-    const handleAIGenerate = async () => {
-        if (!selectedProfile || isGeneratingAI) return;
-        setIsGeneratingAI(true);
-        try {
-            const suggestion = await generateWorkoutSuggestion(selectedProfile, workoutSport);
-            if (suggestion) {
-                setWorkoutTitle(suggestion.title);
-                const mappedExercises: Exercise[] = suggestion.exercises.map((ex, idx) => ({
-                    id: `ai-${Date.now()}-${idx}`,
-                    name: ex.name,
-                    type: workoutSport === SportType.GYM ? 'strength' : 'cardio',
-                    sets: ex.sets,
-                    reps: workoutSport === SportType.GYM ? ex.repsOrDistance : undefined,
-                    load: workoutSport === SportType.GYM ? ex.loadOrPace : undefined,
-                    distance: workoutSport !== SportType.GYM ? ex.repsOrDistance : undefined,
-                    pace: workoutSport !== SportType.GYM ? ex.loadOrPace : undefined,
-                    duration: undefined,
-                    rest: ex.rest,
-                    notes: ex.notes,
-                    completed: false
-                }));
-                setExercises(mappedExercises);
-            }
-        } catch (error) {
-            console.error("AI Generation Error:", error);
-        } finally {
-            setIsGeneratingAI(false);
-        }
     };
 
     if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600" /></div>;
@@ -179,35 +120,8 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <StatCard label="Alunos Ativos" value={students.length} icon={Users} color="bg-indigo-600" />
-                        <StatCard label="Treinos Prescritos" value={db.getLocal('workouts').length} icon={Dumbbell} color="bg-emerald-600" />
-                        <StatCard label="Mensagens Pendentes" value="3" icon={MessageCircle} color="bg-rose-600" />
-                    </div>
-                </div>
-            );
-
-        case 'agenda':
-            return (
-                <div className="space-y-8 animate-fade-in">
-                    <h2 className="text-3xl font-black text-slate-900">Agenda de Avaliações</h2>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                            <h3 className="text-xl font-black mb-6">Próximos Compromissos</h3>
-                            <div className="space-y-4">
-                                {db.getEvents(user.id).map(e => (
-                                    <div key={e.id} className="p-6 bg-slate-50 rounded-3xl flex items-center gap-6 group hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-slate-100">
-                                        <div className="w-16 h-16 bg-white rounded-2xl flex flex-col items-center justify-center border border-slate-100 shadow-sm text-slate-900">
-                                            <span className="text-[10px] font-black uppercase text-indigo-600">{new Date(e.date).toLocaleString('pt-BR', { month: 'short' })}</span>
-                                            <span className="text-xl font-black">{new Date(e.date).getDate()}</span>
-                                        </div>
-                                        <div className="flex-1">
-                                            <h4 className="font-black text-lg">{e.title}</h4>
-                                            <p className="text-sm text-slate-400 font-medium flex items-center gap-2"><Clock className="w-3 h-3" /> {e.time}</p>
-                                        </div>
-                                        <button onClick={() => db.deleteEvent(e.id)} className="p-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5" /></button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        <StatCard label="Mensagens Pendentes" value="Chat Ativo" icon={MessageCircle} color="bg-rose-600" />
+                        <StatCard label="Gestão Treyo" value="Ativa" icon={Activity} color="bg-emerald-600" />
                     </div>
                 </div>
             );
@@ -235,7 +149,7 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                                         </div>
                                         <div className="flex-1">
                                             <h3 className="font-bold text-lg text-slate-900">{s.name}</h3>
-                                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Aluno Ativo</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Amigo Platinum</p>
                                         </div>
                                         <ChevronRight className="w-5 h-5 text-slate-200 group-hover:text-indigo-600" />
                                     </div>
@@ -252,90 +166,69 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                         <button onClick={() => setBuilderState('list')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar para Lista</button>
                         <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-10 items-center">
                             <div className="w-32 h-32 rounded-[2.5rem] bg-slate-900 flex items-center justify-center text-5xl font-black text-white shadow-xl">{selectedStudent.name.charAt(0)}</div>
-                            <div>
+                            <div className="text-center md:text-left">
                                 <h2 className="text-4xl font-black text-slate-900 mb-2">{selectedStudent.name}</h2>
                                 <p className="text-slate-500 font-medium mb-4">{selectedStudent.email}</p>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 justify-center md:justify-start">
                                     <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-full">Meta: {selectedProfile?.goal}</span>
                                     <span className="px-3 py-1 bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-full">{selectedProfile?.weight} kg</span>
                                 </div>
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <ActionButton onClick={() => setBuilderState('workout')} icon={Dumbbell} label="Prescrever Treino" sub="Montar ficha contextual" color="bg-indigo-50 text-indigo-600" hColor="group-hover:bg-indigo-600" />
+                            <ActionButton onClick={() => setBuilderState('workout')} icon={Dumbbell} label="Prescrever Treino" sub="Montar ficha sincronizada" color="bg-indigo-50 text-indigo-600" hColor="group-hover:bg-indigo-600" />
                             <ActionButton onClick={() => setBuilderState('diet')} icon={Utensils} label="Prescrever Dieta" sub="Macros e alimentação" color="bg-emerald-50 text-emerald-600" hColor="group-hover:bg-emerald-600" />
-                            <ActionButton onClick={() => setBuilderState('evolution')} icon={TrendingUp} label="Ver Evolução" sub="Fotos e medidas" color="bg-amber-50 text-amber-600" hColor="group-hover:bg-amber-600" />
+                            <ActionButton onClick={() => setBuilderState('evolution')} icon={TrendingUp} label="Ver Evolução" sub="Fotos e medidas globais" color="bg-amber-50 text-amber-600" hColor="group-hover:bg-amber-600" />
                         </div>
                     </div>
                 );
+            }
+            
+            if (builderState === 'evolution' && selectedStudent) {
+                 return (
+                    <div className="space-y-8 animate-fade-in pb-20">
+                         <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
+                         <h2 className="text-3xl font-black text-slate-900">Evolução de {selectedStudent.name}</h2>
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {evolutionLogs.map(log => (
+                                <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                                    {log.photoUrl && <img src={log.photoUrl} className="aspect-[4/3] w-full object-cover" />}
+                                    <div className="p-8 space-y-4">
+                                        <div className="flex justify-between items-center border-b pb-4">
+                                            <span className="text-sm font-black text-indigo-600">{new Date(log.date).toLocaleDateString()}</span>
+                                            <span className="text-xl font-black">{log.weight}kg</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div className="p-2 bg-slate-50 rounded-lg">Cintura: {log.measurements?.waist}cm</div>
+                                            <div className="p-2 bg-slate-50 rounded-lg">Quadril: {log.measurements?.hips}cm</div>
+                                        </div>
+                                        {log.notes && <p className="text-xs text-slate-500 italic">"{log.notes}"</p>}
+                                    </div>
+                                </div>
+                            ))}
+                         </div>
+                    </div>
+                 );
             }
 
             if (builderState === 'diet') {
                 return (
                     <div className="space-y-8 animate-fade-in pb-20">
-                        <div className="flex justify-between items-center">
-                            <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
-                            <h2 className="text-2xl font-black text-slate-900">Dieta de {selectedStudent?.name}</h2>
-                        </div>
-
-                        {/* Card de Macros */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Metas de Macronutrientes</h3>
+                        <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
+                        <h2 className="text-2xl font-black">Plano Alimentar Sincronizado</h2>
+                        {/* Reutilizando lógica de MealEditor e MacroInput */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <MacroInput label="Calorias (kcal)" value={dietMacros.calories} onChange={v => setDietMacros({...dietMacros, calories: v})} />
-                                <MacroInput label="Proteínas (g)" value={dietMacros.protein} onChange={v => setDietMacros({...dietMacros, protein: v})} />
-                                <MacroInput label="Carbos (g)" value={dietMacros.carbs} onChange={v => setDietMacros({...dietMacros, carbs: v})} />
-                                <MacroInput label="Gorduras (g)" value={dietMacros.fats} onChange={v => setDietMacros({...dietMacros, fats: v})} />
+                                <MacroInput label="Kcal" value={dietMacros.calories} onChange={(v:number) => setDietMacros({...dietMacros, calories: v})} />
+                                <MacroInput label="Proteína" value={dietMacros.protein} onChange={(v:number) => setDietMacros({...dietMacros, protein: v})} />
+                                <MacroInput label="Carbo" value={dietMacros.carbs} onChange={(v:number) => setDietMacros({...dietMacros, carbs: v})} />
+                                <MacroInput label="Gordura" value={dietMacros.fats} onChange={(v:number) => setDietMacros({...dietMacros, fats: v})} />
                             </div>
                         </div>
-
-                        {/* Editor de Refeições */}
-                        <div className="space-y-6">
-                            <MealEditor icon={Sunrise} label="Café da Manhã" color="text-amber-500" value={meals.breakfast} onChange={v => setMeals({...meals, breakfast: v})} />
-                            <MealEditor icon={Sun} label="Almoço" color="text-indigo-500" value={meals.lunch} onChange={v => setMeals({...meals, lunch: v})} />
-                            <MealEditor icon={Coffee} label="Café da Tarde" color="text-orange-500" value={meals.snack} onChange={v => setMeals({...meals, snack: v})} />
-                            <MealEditor icon={Soup} label="Jantar" color="text-rose-500" value={meals.dinner} onChange={v => setMeals({...meals, dinner: v})} />
-                            <MealEditor icon={Moon} label="Ceia" color="text-slate-900" value={meals.supper} onChange={v => setMeals({...meals, supper: v})} />
-                        </div>
-
-                        {/* Orientações Gerais */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Diretrizes Adicionais</h3>
-                            <textarea 
-                                className="w-full h-32 p-4 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 focus:bg-white transition-all"
-                                placeholder="Hidratação, suplementação, horários preferenciais..."
-                                value={dietGuidelines}
-                                onChange={e => setDietGuidelines(e.target.value)}
-                            />
-                        </div>
-
-                        <button onClick={handleSaveDiet} className="w-full bg-emerald-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all">
-                            <Save className="w-6 h-6" /> Salvar Plano Alimentar
-                        </button>
-                    </div>
-                );
-            }
-
-            if (builderState === 'workout') {
-                return (
-                    <div className="space-y-8 animate-fade-in pb-20">
-                        <div className="flex justify-between items-center">
-                            <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
-                            <button onClick={handleAIGenerate} disabled={isGeneratingAI} className="bg-amber-100 text-amber-700 px-6 py-3 rounded-xl font-black text-xs flex items-center gap-2 hover:bg-amber-200 transition-all shadow-sm">
-                                {isGeneratingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} SUGERIR COM IA
-                            </button>
-                        </div>
-                        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Modalidade</label><select className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold" value={workoutSport} onChange={e => {setWorkoutSport(e.target.value as SportType); setExercises([]);}}>{Object.values(SportType).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                                <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Título</label><input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold" value={workoutTitle} onChange={e => setWorkoutTitle(e.target.value)} /></div>
-                                <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-1">Divisão</label><input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold" value={workoutSplit} onChange={e => setWorkoutSplit(e.target.value)} /></div>
-                            </div>
-                            <div className="space-y-6">
-                                <div className="flex justify-between items-center border-b pb-4"><h4 className="font-black text-slate-900 text-xl">Exercícios</h4><button onClick={() => setExercises([...exercises, { id: Date.now().toString(), name: '', type: 'strength', rest: '60s', completed: false }])} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:scale-105 transition-transform"><Plus className="w-4 h-4" /> Adicionar</button></div>
-                            </div>
-                            <button onClick={handleSaveWorkout} className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black text-xl shadow-2xl flex items-center justify-center gap-3"><Save className="w-6 h-6" /> Salvar Treino</button>
-                        </div>
+                        <MealEditor label="Café da Manhã" icon={Sunrise} color="text-amber-500" value={meals.breakfast} onChange={(v:string) => setMeals({...meals, breakfast: v})} />
+                        <MealEditor label="Almoço" icon={Sun} color="text-indigo-500" value={meals.lunch} onChange={(v:string) => setMeals({...meals, lunch: v})} />
+                        <MealEditor label="Jantar" icon={Soup} color="text-rose-500" value={meals.dinner} onChange={(v:string) => setMeals({...meals, dinner: v})} />
+                        <button onClick={handleSaveDiet} className="w-full bg-emerald-600 text-white py-6 rounded-2xl font-black text-xl flex items-center justify-center gap-3"><Save /> Salvar e Enviar</button>
                     </div>
                 );
             }
@@ -346,132 +239,73 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
     }
 };
 
-// --- Helper Components ---
-
-const MealEditor = ({ icon: Icon, label, color, value, onChange }: any) => (
-    <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6">
-        <div className="flex items-center gap-4 md:w-48">
-            <div className={`p-3 rounded-xl bg-slate-50 ${color}`}>
-                <Icon className="w-6 h-6" />
-            </div>
-            <span className="font-black text-slate-900 whitespace-nowrap">{label}</span>
-        </div>
-        <textarea 
-            className="flex-1 min-h-[100px] p-4 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 focus:bg-slate-100 transition-all resize-none"
-            placeholder={`Descreva o ${label.toLowerCase()}...`}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-        />
-    </div>
-);
-
-const MacroInput = ({ label, value, onChange }: any) => (
-    <div>
-        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1 ml-1">{label}</label>
-        <input 
-            type="number" 
-            className="w-full p-4 bg-slate-50 rounded-xl font-black text-slate-900 outline-none focus:bg-white border border-transparent focus:border-indigo-100 transition-all"
-            value={value}
-            onChange={e => onChange(parseInt(e.target.value))}
-        />
-    </div>
-);
-
 const StatCard = ({ label, value, icon: Icon, color }: any) => (
-    <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6 group hover:shadow-md transition-all">
-        <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform`}>
-            <Icon className="w-7 h-7" />
-        </div>
-        <div>
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">{label}</p>
-            <p className="text-2xl font-black text-slate-900">{value}</p>
-        </div>
+    <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6 group hover:shadow-md transition-all text-left">
+        <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform shrink-0`}><Icon className="w-7 h-7" /></div>
+        <div><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">{label}</p><p className="text-xl font-black text-slate-900">{value}</p></div>
     </div>
 );
 
 const ActionButton = ({ onClick, icon: Icon, label, sub, color, hColor }: any) => (
     <button onClick={onClick} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all text-left group flex flex-col gap-6">
-        <div className={`w-14 h-14 ${color} ${hColor} group-hover:text-white rounded-2xl flex items-center justify-center transition-all`}>
-            <Icon className="w-7 h-7" />
-        </div>
-        <div>
-            <h3 className="font-bold text-lg text-slate-900">{label}</h3>
-            <p className="text-xs text-slate-400 font-medium">{sub}</p>
-        </div>
+        <div className={`w-14 h-14 ${color} ${hColor} group-hover:text-white rounded-2xl flex items-center justify-center transition-all shrink-0`}><Icon className="w-7 h-7" /></div>
+        <div><h3 className="font-bold text-lg text-slate-900">{label}</h3><p className="text-xs text-slate-400 font-medium">{sub}</p></div>
     </button>
+);
+
+const MacroInput = ({ label, value, onChange }: any) => (
+    <div className="text-left">
+        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1 ml-1">{label}</label>
+        <input type="number" className="w-full p-4 bg-slate-50 rounded-xl font-black text-slate-900 outline-none border border-transparent focus:border-indigo-100" value={value} onChange={e => onChange(parseInt(e.target.value))} />
+    </div>
+);
+
+const MealEditor = ({ icon: Icon, label, color, value, onChange }: any) => (
+    <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6 text-left">
+        <div className="flex items-center gap-4 md:w-48"><div className={`p-3 rounded-xl bg-slate-50 ${color}`}><Icon className="w-6 h-6" /></div><span className="font-black text-slate-900">{label}</span></div>
+        <textarea className="flex-1 min-h-[100px] p-4 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 resize-none" placeholder={`Prescreva o ${label.toLowerCase()}...`} value={value} onChange={e => onChange(e.target.value)} />
+    </div>
 );
 
 const TrainerChatView = ({ students, user }: { students: User[], user: User }) => {
     const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
-
-    useEffect(() => {
-        if (selectedStudent) {
-            const msgs = db.getMessages(user.id, selectedStudent.id);
-            setMessages(msgs);
-            const interval = setInterval(() => {
-                setMessages(db.getMessages(user.id, selectedStudent.id));
-            }, 3000);
-            return () => clearInterval(interval);
-        }
-    }, [selectedStudent, user.id]);
-
-    const handleSendMessage = () => {
-        if (!input || !selectedStudent) return;
-        const msg: ChatMessage = {
-            id: Date.now().toString(),
-            senderId: user.id,
-            receiverId: selectedStudent.id,
-            content: input,
-            timestamp: new Date().toISOString(),
-            read: false
-        };
-        db.sendMessage(msg);
-        setInput('');
-        setMessages(db.getMessages(user.id, selectedStudent.id));
-    };
-
+    const loadMsgs = async () => { if(selectedStudent) { const m = await db.getMessages(user.id, selectedStudent.id); setMessages(m); } };
+    useEffect(() => { loadMsgs(); }, [selectedStudent]);
     return (
         <div className="bg-white h-[calc(100vh-200px)] rounded-[3rem] border border-slate-100 shadow-2xl flex overflow-hidden animate-fade-in">
-            <div className="w-80 border-r border-slate-50 flex flex-col bg-slate-50/30">
-                <div className="p-8 border-b border-slate-50 bg-white">
-                    <h3 className="font-black text-slate-900 text-lg">Conversas</h3>
-                </div>
+            <div className="w-full md:w-80 border-r border-slate-50 flex flex-col bg-slate-50/30">
+                <div className="p-8 border-b border-slate-50 bg-white"><h3 className="font-black text-slate-900 text-lg">Conversas</h3></div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                     {students.map(s => (
                         <button key={s.id} onClick={() => setSelectedStudent(s)} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${selectedStudent?.id === s.id ? 'bg-slate-900 text-white shadow-lg' : 'hover:bg-white text-slate-600'}`}>
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${selectedStudent?.id === s.id ? 'bg-indigo-600' : 'bg-slate-200 text-slate-400'}`}>{s.name.charAt(0)}</div>
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 ${selectedStudent?.id === s.id ? 'bg-indigo-600' : 'bg-slate-200 text-slate-400'}`}>{s.name.charAt(0)}</div>
                             <span className="font-bold text-sm truncate">{s.name}</span>
                         </button>
                     ))}
                 </div>
             </div>
-            <div className="flex-1 flex flex-col bg-white">
+            <div className="hidden md:flex flex-1 flex-col bg-white">
                 {selectedStudent ? (
                     <>
-                        <div className="p-8 border-b border-slate-50 flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black">{selectedStudent.name.charAt(0)}</div>
-                            <h3 className="font-black text-slate-900 text-xl">{selectedStudent.name}</h3>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-slate-50/20">
+                        <div className="p-8 border-b border-slate-50 flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black">{selectedStudent.name.charAt(0)}</div><h3 className="font-black text-slate-900 text-xl">{selectedStudent.name}</h3></div>
+                        <div className="flex-1 overflow-y-auto p-10 space-y-6 bg-slate-50/20 custom-scrollbar">
                             {messages.map(m => (
                                 <div key={m.id} className={`flex ${m.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[70%] p-6 rounded-3xl shadow-sm font-medium ${m.senderId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'}`}>
-                                        <p className="text-sm">{m.content}</p>
-                                    </div>
+                                    <div className={`max-w-[70%] p-6 rounded-3xl shadow-sm font-medium ${m.senderId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'}`}><p className="text-sm">{m.content}</p></div>
                                 </div>
                             ))}
                         </div>
                         <div className="p-8 border-t border-slate-50">
                             <div className="relative">
-                                <input className="w-full pl-8 pr-24 py-5 bg-slate-50 border-2 border-transparent rounded-[2rem] outline-none shadow-inner focus:bg-white focus:border-indigo-500 font-bold transition-all" placeholder="Responder aluno..." value={input} onChange={e => setInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} />
-                                <button onClick={handleSendMessage} className="absolute right-3 top-3 bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all"><Send className="w-6 h-6" /></button>
+                                <input className="w-full pl-8 pr-24 py-5 bg-slate-50 border-2 border-transparent rounded-[2rem] outline-none shadow-inner focus:bg-white focus:border-indigo-500 font-bold transition-all" placeholder="Responder aluno..." value={input} onChange={e => setInput(e.target.value)} onKeyPress={async (e) => {if(e.key === 'Enter') { await db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: selectedStudent.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); loadMsgs(); }}} />
+                                <button onClick={async () => { if(input && selectedStudent) { await db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: selectedStudent.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); loadMsgs(); }}} className="absolute right-3 top-3 bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all"><Send className="w-6 h-6" /></button>
                             </div>
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic"><MessageCircle className="w-16 h-16 opacity-10" /><p>Selecione um aluno para iniciar a conversa.</p></div>
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic"><MessageCircle className="w-16 h-16 opacity-10" /><p>Selecione um aluno para conversar.</p></div>
                 )}
             </div>
         </div>

@@ -10,7 +10,6 @@ import {
     Check, ChevronDown, TrendingUp, ImageIcon, Sunrise, Sun, Coffee, Soup, Moon, Ruler
 } from 'lucide-react';
 
-// Added BIBLE_STRUCTURE to define the number of chapters in each book of the Bible
 const BIBLE_STRUCTURE: Record<string, number> = {
     'Gênesis': 50, 'Êxodo': 40, 'Levítico': 27, 'Números': 36, 'Deuteronômio': 34,
     'Josué': 24, 'Juízes': 21, 'Rute': 4, '1 Samuel': 31, '2 Samuel': 24,
@@ -28,29 +27,10 @@ const BIBLE_STRUCTURE: Record<string, number> = {
     'Judas': 1, 'Apocalipse': 22
 };
 
-// Added BIBLE_PLANS to provide reading plan options for the user
 const BIBLE_PLANS: ReadingPlan[] = [
-    {
-        id: 'anual-001',
-        name: 'Bíblia Toda em 1 Ano',
-        category: 'Anual',
-        description: 'Um plano clássico para ler toda a Bíblia seguindo a ordem canônica.',
-        books: Object.keys(BIBLE_STRUCTURE)
-    },
-    {
-        id: 'nt-001',
-        name: 'Novo Testamento em 90 Dias',
-        category: 'NT',
-        description: 'Foco total nos evangelhos e cartas apostólicas.',
-        books: ['Mateus', 'Marcos', 'Lucas', 'João', 'Atos', 'Romanos', '1 Coríntios', '2 Coríntios', 'Gálatas', 'Efésios', 'Filipenses', 'Colossenses', '1 Tessalonicenses', '2 Tessalonicenses', '1 Timóteo', '2 Timóteo', 'Tito', 'Filemon', 'Hebreus', 'Tiago', '1 Pedro', '2 Pedro', '1 João', '2 João', '3 João', 'Judas', 'Apocalipse']
-    },
-    {
-        id: 'sabedoria-001',
-        name: 'Livros de Sabedoria',
-        category: 'Sabedoria',
-        description: 'Uma jornada por Salmos, Provérbios e Eclesiastes.',
-        books: ['Jó', 'Salmos', 'Provérbios', 'Eclesiastes', 'Cantares']
-    }
+    { id: 'anual-001', name: 'Bíblia Toda em 1 Ano', category: 'Anual', description: 'Plano clássico seguindo a ordem canônica.', books: Object.keys(BIBLE_STRUCTURE) },
+    { id: 'nt-001', name: 'Novo Testamento em 90 Dias', category: 'NT', description: 'Foco total nos evangelhos e cartas apostólicas.', books: Object.keys(BIBLE_STRUCTURE).slice(39) },
+    { id: 'sabedoria-001', name: 'Livros de Sabedoria', category: 'Sabedoria', description: 'Jornada por Salmos, Provérbios e Eclesiastes.', books: ['Jó', 'Salmos', 'Provérbios', 'Eclesiastes', 'Cantares'] }
 ];
 
 interface StudentViewProps {
@@ -74,23 +54,24 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
         const foundTrainer = allUsers.find(u => u.role === 'trainer');
         const p = await db.getProfile(user.id);
         const l = await db.getReadingLeaderboard();
+        const w = await db.getWorkouts(user.id);
+        const d = await db.getDiet(user.id);
+        const c = await db.getCommunityPosts();
+        const prog = await db.getProgress(user.id);
         
         setTrainer(foundTrainer);
         setProfile(p);
         setLeaderboard(l);
-        setWorkouts(db.getWorkouts(user.id));
-        setDiet(db.getDiet(user.id));
-        setCommunityPosts(db.getCommunityPosts());
-        
-        const prog = await db.getProgress(user.id);
+        setWorkouts(w);
+        setDiet(d);
+        setCommunityPosts(c);
         setProgress(prog);
-        
         setLoading(false);
     };
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(loadData, 12000); 
+        const interval = setInterval(loadData, 15000); 
         return () => clearInterval(interval);
     }, [user.id, activeTab]);
 
@@ -171,21 +152,27 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
     const [view, setView] = useState<'shelf' | 'community' | 'add'>('shelf');
     const [sortBy, setSortBy] = useState<'title' | 'author' | 'category'>('title');
     const [filterCategory, setFilterCategory] = useState<string>('all');
+    const [allReviews, setAllReviews] = useState<BookReview[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     
     const categories = ['Espiritualidade', 'Desenvolvimento Pessoal', 'Saúde & Fitness', 'Biografia', 'Ficção', 'Negócios', 'Outros'];
 
     const [newBook, setNewBook] = useState({ 
-        id: '',
-        title: '', 
-        author: '', 
-        review: '', 
-        category: categories[0],
-        rating: 5 
+        id: '', title: '', author: '', review: '', category: categories[0], rating: 5 
     });
 
-    const reviews = db.getBookReviews();
+    const loadReviews = async () => {
+        setIsLoading(true);
+        const reviews = await db.getBookReviews();
+        setAllReviews(reviews);
+        setIsLoading(false);
+    };
 
-    const filteredReviews = reviews
+    useEffect(() => {
+        loadReviews();
+    }, [view]);
+
+    const filteredReviews = allReviews
         .filter(r => view === 'shelf' ? r.userId === user.id : true)
         .filter(r => {
             if (filterCategory === 'all') return true;
@@ -198,9 +185,9 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
             return 0;
         });
 
-    const handleSaveReview = () => {
+    const handleSaveReview = async () => {
         if (!newBook.title || !newBook.review) return alert('Título e resenha são obrigatórios.');
-        db.saveBookReview({
+        const reviewData: BookReview = {
             id: newBook.id || Date.now().toString(),
             userId: user.id,
             userName: user.name,
@@ -211,9 +198,11 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
             rating: newBook.rating,
             timestamp: new Date().toISOString(),
             comments: []
-        });
+        };
+        await db.saveBookReview(reviewData);
         setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 });
         setView('shelf');
+        loadReviews();
         onUpdate();
     };
 
@@ -229,8 +218,8 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
         setView('add');
     };
 
-    const handleAddToShelf = (book: BookReview) => {
-        db.saveBookReview({
+    const handleAddToShelf = async (book: BookReview) => {
+        await db.saveBookReview({
             ...book,
             id: `clone-${Date.now()}`,
             userId: user.id,
@@ -239,7 +228,7 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
             comments: []
         });
         alert('Livro adicionado à sua estante!');
-        onUpdate();
+        loadReviews();
     };
 
     return (
@@ -281,29 +270,43 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                     <div className="flex justify-between items-center"><h3 className="text-2xl font-black">{newBook.id ? 'Editar Livro' : 'Adicionar à Estante'}</h3><button onClick={() => setView('shelf')}><X /></button></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
-                            <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
-                            <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
-                            <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.category} onChange={e => setNewBook({...newBook, category: e.target.value})}>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
+                            <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
+                            <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoria</label>
+                                <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.category} onChange={e => setNewBook({...newBook, category: e.target.value})}>
+                                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Avaliação</label>
+                                <div className="flex gap-2 bg-slate-50 p-4 rounded-2xl">
+                                    {[1,2,3,4,5].map(s => (
+                                        <button key={s} onClick={() => setNewBook({...newBook, rating: s})} className={`transition-all ${s <= newBook.rating ? 'text-amber-400 scale-110' : 'text-slate-200'}`}><Star className="fill-current w-6 h-6" /></button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
-                        <textarea placeholder="Sua resenha ou notas sobre o livro..." className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-medium h-full min-h-[150px]" value={newBook.review} onChange={e => setNewBook({...newBook, review: e.target.value})} />
+                        <textarea placeholder="Sua resenha ou notas sobre o livro..." className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-medium h-full min-h-[150px] border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.review} onChange={e => setNewBook({...newBook, review: e.target.value})} />
                     </div>
                     <button onClick={handleSaveReview} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-indigo-700 transition-all">
                         {newBook.id ? 'Salvar Alterações' : 'Publicar na Minha Estante'}
                     </button>
                 </div>
+            ) : isLoading ? (
+                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {filteredReviews.length === 0 ? (
-                        <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
+                        <div className="col-span-full py-24 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100 shadow-sm">
+                            <BookOpen className="w-12 h-12 text-slate-100 mx-auto mb-4" />
                             <p className="text-slate-400 font-bold italic">Nenhum livro encontrado nesta seção.</p>
                         </div>
                     ) : filteredReviews.map(r => (
                         <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group relative">
                             <div className="mb-4 flex justify-between items-start">
                                 <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{r.category || 'Outros'}</span>
-                                <div className="flex text-amber-400">{Array(5).fill(0).map((_, i) => <Star key={i} className={`w-3 h-3 ${i < r.rating ? 'fill-current' : 'text-slate-200'}`}/>)}</div>
+                                <div className="flex text-amber-400">{Array(5).fill(0).map((_, i) => <Star key={i} className={`w-3 h-3 ${i < r.rating ? 'fill-current' : 'text-slate-100'}`}/>)}</div>
                             </div>
                             <h4 className="text-xl font-black text-slate-900 leading-tight mb-1">{r.title}</h4>
                             <p className="text-xs font-bold text-slate-400 uppercase mb-4">{r.author || 'Autor desconhecido'}</p>
@@ -311,7 +314,7 @@ const LibraryView = ({ user, profile, onUpdate }: any) => {
                             
                             <div className="mt-8 pt-6 border-t border-slate-50 flex justify-between items-center">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-indigo-600">{r.userName.charAt(0)}</div>
+                                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-indigo-600">{r.userName?.charAt(0) || 'U'}</div>
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{r.userName}</span>
                                 </div>
                                 <div className="flex gap-2">
@@ -492,7 +495,7 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                                             <p className="font-black text-slate-700">{log.measurements?.hips || '-'} cm</p>
                                         </div>
                                     </div>
-                                    {log.notes && <p className="text-xs text-slate-500 italic">"{log.notes}"</p>}
+                                    {log.notes && <p className="text-xs text-slate-500 italic leading-relaxed">"{log.notes}"</p>}
                                 </div>
                             </div>
                         ))}
@@ -518,7 +521,8 @@ const MeasurementInput = ({ label, value, onChange }: any) => (
 const ChatView = ({ user, trainer, onMessageSent }: any) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
-    useEffect(() => { if (trainer) { setMessages(db.getMessages(user.id, trainer.id)); } }, [trainer, user.id]);
+    const loadMsgs = async () => { if (trainer) { const m = await db.getMessages(user.id, trainer.id); setMessages(m); } };
+    useEffect(() => { loadMsgs(); }, [trainer, user.id]);
     return (
         <div className="bg-white h-[70vh] rounded-[3rem] border border-slate-100 flex flex-col overflow-hidden shadow-sm">
             <div className="p-8 border-b font-black flex items-center gap-3">
@@ -538,7 +542,7 @@ const ChatView = ({ user, trainer, onMessageSent }: any) => {
             </div>
             <div className="p-8 flex gap-4">
                 <input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Escreva para o moderador..." value={input} onChange={e => setInput(e.target.value)} />
-                <button onClick={() => { if(input && trainer) { db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all"><Send /></button>
+                <button onClick={async () => { if(input && trainer) { await db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); loadMsgs(); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all"><Send /></button>
             </div>
         </div>
     );
@@ -553,7 +557,7 @@ const WorkoutView = ({ workouts }: any) => {
             <h2 className="text-4xl font-black text-slate-900 mb-8">Meus Treinos</h2>
             <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
                 {workouts.map((w: any) => (
-                    <button key={w.id} onClick={() => setActiveSplit(w.id)} className={`px-8 py-4 rounded-2xl font-black border-2 ${activeSplit === w.id ? 'bg-slate-900 border-slate-900 text-white shadow-xl' : 'bg-white text-slate-400 border-slate-50'}`}>{w.split || 'Treino'}</button>
+                    <button key={w.id} onClick={() => setActiveSplit(w.id)} className={`px-8 py-4 rounded-2xl font-black border-2 shrink-0 ${activeSplit === w.id ? 'bg-slate-900 border-slate-900 text-white shadow-xl' : 'bg-white text-slate-400 border-slate-50'}`}>{w.split || 'Treino'}</button>
                 ))}
             </div>
             <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
@@ -601,22 +605,22 @@ const DietView = ({ diet }: any) => {
 
 const QuickActionBtn = ({ icon: Icon, label, onClick, color }: any) => (
     <button onClick={onClick} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] group hover:bg-slate-900 transition-all border border-transparent shadow-sm hover:translate-y-[-4px]">
-        <div className="flex items-center gap-4"><div className={`p-4 bg-white rounded-2xl shadow-sm ${color} group-hover:bg-white/10 transition-all`}><Icon className="w-6 h-6" /></div><span className="font-black text-sm group-hover:text-white">{label}</span></div>
+        <div className="flex items-center gap-4"><div className={`p-4 bg-white rounded-2xl shadow-sm ${color} group-hover:bg-white/10 transition-all`}><Icon className="w-6 h-6" /></div><span className="font-black text-sm group-hover:text-white text-left">{label}</span></div>
         <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-white transition-all" />
     </button>
 );
 
 const MacroCard = ({ label, value, unit, color }: any) => (
-    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:translate-y-[-4px] group">
+    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:translate-y-[-4px] group text-left">
         <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">{label}</p>
-        <p className="text-3xl font-black text-slate-900">{value} <span className="text-xs font-bold text-slate-300">{unit}</span></p>
+        <p className="text-2xl font-black text-slate-900">{value} <span className="text-xs font-bold text-slate-300">{unit}</span></p>
         <div className={`w-full h-1.5 ${color} rounded-full mt-4 opacity-10`}></div>
     </div>
 );
 
 const Card = ({ label, value, icon: Icon, color }: any) => (
-    <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm flex items-center gap-6 group hover:shadow-md transition-all">
-        <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}><Icon className="w-6 h-6" /></div>
+    <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm flex items-center gap-6 group hover:shadow-md transition-all text-left">
+        <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform shrink-0`}><Icon className="w-6 h-6" /></div>
         <div><p className="text-[10px] font-black uppercase text-slate-400 leading-tight mb-1">{label}</p><p className="text-xl font-black text-slate-900">{value}</p></div>
     </div>
 );
@@ -626,11 +630,11 @@ const CommunityView = ({ posts, user, onUpdate }: any) => {
     return (
         <div className="flex flex-col h-[75vh] space-y-6">
             <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                {posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] shadow-sm ${p.userId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}`}><p className="text-[9px] font-black opacity-40 uppercase mb-1">{p.userName}</p><p className="font-medium">{p.content}</p></div></div>)}
+                {posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] shadow-sm ${p.userId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}`}><p className="text-[9px] font-black opacity-40 uppercase mb-1">{p.userName}</p><p className="font-medium text-sm">{p.content}</p></div></div>)}
             </div>
             <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-xl flex gap-4">
                 <input className="flex-1 bg-slate-50 px-8 py-5 rounded-[2rem] outline-none font-bold" placeholder="Compartilhe seu progresso..." value={input} onChange={e => setInput(e.target.value)} />
-                <button onClick={() => { if(input) { db.addCommunityPost({ id: Date.now().toString(), userId: user.id, userName: user.name, content: input, timestamp: new Date().toISOString() }); setInput(''); onUpdate(); } }} className="bg-slate-900 text-white p-5 rounded-[1.8rem]"><Send /></button>
+                <button onClick={async () => { if(input) { await db.addCommunityPost({ id: Date.now().toString(), userId: user.id, userName: user.name, content: input, timestamp: new Date().toISOString() }); setInput(''); onUpdate(); } }} className="bg-slate-900 text-white p-5 rounded-[1.8rem]"><Send /></button>
             </div>
         </div>
     );
@@ -735,7 +739,7 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
                                         </button>
                                         {expandedBook === book && (
                                             <div className="p-6 bg-slate-50/50 border-t border-slate-50 grid grid-cols-5 md:grid-cols-10 gap-2 animate-fade-in">
-                                                {Array.from({ length: BIBLE_STRUCTURE[book] }, (_, i) => i + 1).map(chap => {
+                                                {Array.from({ length: BIBLE_STRUCTURE[book] || 0 }, (_, i) => i + 1).map(chap => {
                                                     const isRead = localChapters.includes(`${book}-${chap}`);
                                                     return (
                                                         <button key={chap} onClick={() => toggleChapter(book, chap)} className={`h-10 rounded-lg font-black text-xs transition-all flex items-center justify-center border shadow-sm ${isRead ? 'bg-indigo-600 border-indigo-600 text-white scale-95' : 'bg-white text-slate-400 border-slate-100 hover:border-indigo-300 active:scale-90'}`}>
@@ -754,9 +758,9 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
                             <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
                                 <h3 className="text-2xl font-black text-slate-900">Escolha seu Plano</h3>
                                 <div className="flex bg-white p-1 rounded-xl border border-slate-100 shadow-sm overflow-x-auto max-w-full">
-                                    <button onClick={() => setFilterCategory('all')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterCategory === 'all' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Todos</button>
+                                    <button onClick={() => setFilterCategory('all')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shrink-0 ${filterCategory === 'all' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Todos</button>
                                     {planCategories.map(cat => (
-                                        <button key={cat} onClick={() => setFilterCategory(cat)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterCategory === cat ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>{cat}</button>
+                                        <button key={cat} onClick={() => setFilterCategory(cat)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shrink-0 ${filterCategory === cat ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>{cat}</button>
                                     ))}
                                 </div>
                             </div>
