@@ -99,7 +99,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
         case 'dashboard':
             return (
                 <div className="space-y-8 animate-fade-in pb-20">
-                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden text-left">
                         <div className="relative z-10">
                             <h2 className="text-4xl font-black mb-2 text-white">Olá, {user.name.split(' ')[0]}</h2>
                             <p className="text-slate-400 font-medium leading-relaxed">Sua jornada é única. Cada passo conta.</p>
@@ -170,7 +170,7 @@ const LibraryView = ({ user, profile, reviews, onUpdate }: any) => {
     const filteredReviews = reviews
         .filter((r: BookReview) => {
             if (view === 'shelf') return r.userId === user.id;
-            return true; // Comunidade mostra TODOS os livros de TODOS
+            return true; // Comunidade mostra TODOS os livros de TODOS no Firebase
         })
         .filter((r: BookReview) => {
             if (filterCategory === 'all') return true;
@@ -243,7 +243,7 @@ const LibraryView = ({ user, profile, reviews, onUpdate }: any) => {
                     <button onClick={() => setView('community')} className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition-all ${view === 'community' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>Comunidade</button>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-3 text-left">
                     <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
                         <Filter className="w-4 h-4 text-slate-400" />
                         <select className="bg-transparent text-xs font-black outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
@@ -265,7 +265,7 @@ const LibraryView = ({ user, profile, reviews, onUpdate }: any) => {
             {view === 'add' ? (
                 <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl space-y-6 animate-slide-up">
                     <div className="flex justify-between items-center"><h3 className="text-2xl font-black">{newBook.id ? 'Editar Livro' : 'Adicionar à Estante'}</h3><button onClick={() => setView('shelf')}><X /></button></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                         <div className="space-y-4">
                             <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
                             <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
@@ -298,7 +298,7 @@ const LibraryView = ({ user, profile, reviews, onUpdate }: any) => {
                             <p className="text-slate-400 font-bold italic">Nenhum livro encontrado nesta seção.</p>
                         </div>
                     ) : filteredReviews.map((r: BookReview) => (
-                        <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group relative">
+                        <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group relative text-left">
                             <div className="mb-4 flex justify-between items-start">
                                 <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{r.category || 'Outros'}</span>
                                 <div className="flex text-amber-400">{Array(5).fill(0).map((_, i) => <Star key={i} className={`w-3 h-3 ${i < r.rating ? 'fill-current' : 'text-slate-100'}`}/>)}</div>
@@ -389,7 +389,7 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                         <button onClick={() => setIsAdding(false)} className="text-slate-300 hover:text-slate-900"><X /></button>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 text-left">
                         <div className="space-y-6">
                             <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Foto da Evolução</label>
                             <div 
@@ -450,7 +450,7 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                         <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600">
                             <TrendingUp className="w-8 h-8" />
                         </div>
-                        <div>
+                        <div className="text-left">
                             <h2 className="text-2xl font-black text-slate-900">Linha do Tempo</h2>
                             <p className="text-slate-400 font-medium">Veja visualmente sua transformação física.</p>
                         </div>
@@ -463,7 +463,7 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                                 <p className="text-slate-400 font-bold italic">Nenhum registro de evolução ainda.</p>
                             </div>
                         ) : progress.map((log: ProgressLog) => (
-                            <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all">
+                            <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all text-left">
                                 {log.photoUrl && (
                                     <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100 relative">
                                         <img src={log.photoUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Progresso" />
@@ -502,7 +502,7 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
 };
 
 const MeasurementInput = ({ label, value, onChange }: any) => (
-    <div>
+    <div className="text-left">
         <label className="text-[9px] font-black uppercase text-slate-400 block mb-1.5 ml-1">{label}</label>
         <input 
             type="number" 
@@ -520,7 +520,7 @@ const ChatView = ({ user, trainer, onMessageSent }: any) => {
     useEffect(() => { loadMsgs(); }, [trainer, user.id]);
     return (
         <div className="bg-white h-[70vh] rounded-[3rem] border border-slate-100 flex flex-col overflow-hidden shadow-sm">
-            <div className="p-8 border-b font-black flex items-center gap-3">
+            <div className="p-8 border-b font-black flex items-center gap-3 text-left">
                 <div className="w-10 h-10 bg-indigo-600 rounded-xl text-white flex items-center justify-center">
                     <CheckCircle className="w-5 h-5" />
                 </div> 
@@ -548,7 +548,7 @@ const WorkoutView = ({ workouts }: any) => {
     const currentWorkout = workouts.find((w: any) => w.id === activeSplit) || workouts[0];
     if (!currentWorkout) return <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100"><Dumbbell className="w-16 h-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-400 font-bold">Sem treinos prescritos.</p></div>;
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 text-left">
             <h2 className="text-4xl font-black text-slate-900 mb-8">Meus Treinos</h2>
             <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
                 {workouts.map((w: any) => (
@@ -580,7 +580,7 @@ const DietView = ({ diet }: any) => {
         { id: 'supper', label: 'Ceia', icon: Moon, color: 'text-slate-900' }
     ];
     return (
-        <div className="space-y-10 animate-fade-in">
+        <div className="space-y-10 animate-fade-in text-left">
             <h2 className="text-4xl font-black text-slate-900">Alimentação</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <MacroCard label="Calorias" value={diet.macros?.calories || 0} unit="kcal" color="bg-indigo-500" />
@@ -631,7 +631,7 @@ const CommunityView = ({ posts, user, onUpdate }: any) => {
     return (
         <div className="flex flex-col h-[75vh] space-y-6">
             <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                {posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] shadow-sm ${p.userId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}`}><p className="text-[9px] font-black opacity-40 uppercase mb-1">{p.userName}</p><p className="font-medium text-sm">{p.content}</p></div></div>)}
+                {posts.map((p:any) => <div key={p.id} className={`flex ${p.userId === user.id ? 'justify-end' : 'justify-start'}`}><div className={`p-6 rounded-[2rem] shadow-sm ${p.userId === user.id ? 'bg-slate-900 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none text-left'}`}><p className="text-[9px] font-black opacity-40 uppercase mb-1">{p.userName}</p><p className="font-medium text-sm">{p.content}</p></div></div>)}
             </div>
             <div className="bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-xl flex gap-4">
                 <input className="flex-1 bg-slate-50 px-8 py-5 rounded-[2rem] outline-none font-bold" placeholder="Compartilhe seu progresso..." value={input} onChange={e => setInput(e.target.value)} />
@@ -683,7 +683,7 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
         <div className="space-y-10 animate-fade-in pb-20">
             <div className="flex flex-col lg:flex-row gap-10">
                 <div className="flex-1 space-y-8">
-                    <div className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                    <div className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden text-left">
                         <div className="relative z-10">
                             <h2 className="text-3xl font-black mb-2 text-white">Ápice Espiritual</h2>
                             <p className="text-slate-400 font-medium">Sincronize seu crescimento espiritual.</p>
@@ -704,7 +704,7 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
                     {selectedPlan && view === 'active' ? (
                         <div className="space-y-6">
                             <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-4 text-left">
                                     <button onClick={() => setView('plans')} className="p-3 bg-slate-50 rounded-2xl text-slate-400 hover:text-indigo-600 transition-all">
                                         <ArrowLeft className="w-5 h-5" />
                                     </button>
@@ -722,7 +722,7 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
                             </div>
                             <div className="space-y-4">
                                 {selectedPlan.books.map(book => (
-                                    <div key={book} className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm transition-all">
+                                    <div key={book} className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm transition-all text-left">
                                         <button onClick={() => setExpandedBook(expandedBook === book ? null : book)} className="w-full p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
                                             <div className="flex items-center gap-4 text-left">
                                                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xs">{book.charAt(0)}</div>
@@ -755,7 +755,7 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-8">
+                        <div className="space-y-8 text-left">
                             <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
                                 <h3 className="text-2xl font-black text-slate-900">Escolha seu Plano</h3>
                                 <div className="flex bg-white p-1 rounded-xl border border-slate-100 shadow-sm overflow-x-auto max-w-full">
@@ -785,7 +785,7 @@ const SpiritualView = ({ profile: initialProfile, leaderboard, user, onUpdate }:
                 </div>
 
                 <div className="w-full lg:w-96 space-y-8">
-                    <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-xl flex flex-col h-fit max-h-[85vh] sticky top-8">
+                    <div className="bg-white rounded-[3rem] p-8 border border-slate-100 shadow-xl flex flex-col h-fit max-h-[85vh] sticky top-8 text-left">
                         <div className="flex items-center gap-3 mb-8">
                             <div className="p-3.5 bg-amber-50 rounded-2xl text-amber-500"><Medal className="w-6 h-6" /></div>
                             <div><h3 className="text-xl font-black text-slate-900 leading-none">Ranking Global</h3><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Guerreiros Treyo</p></div>

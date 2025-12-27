@@ -8,7 +8,7 @@ import {
     Trash2, Save, Loader2, ChevronRight, Scale, Clock, Timer, 
     Calendar as CalendarIcon, MessageCircle, TrendingUp, Camera, 
     CheckCircle, Info, LayoutDashboard, Send, Search, Coffee,
-    Sun, Sunrise, Moon, Soup, Ruler
+    Sun, Sunrise, Moon, Soup, Ruler, X
 } from 'lucide-react';
 
 interface TrainerViewProps {
@@ -59,34 +59,51 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
         setSelectedStudent(student);
         const p = await db.getProfile(student.id);
         setSelectedProfile(p || null);
+        
+        // Carrega dieta atual
         const currentDiet = await db.getDiet(student.id);
         if (currentDiet) {
-            setDietMacros(currentDiet.macros);
+            setDietMacros(currentDiet.macros || { calories: 2000, protein: 150, carbs: 200, fats: 60 });
             setMeals(currentDiet.meals || { breakfast: '', lunch: '', snack: '', dinner: '', supper: '' });
             setDietGuidelines(currentDiet.guidelines || '');
         } else {
             setMeals({ breakfast: '', lunch: '', snack: '', dinner: '', supper: '' });
             setDietGuidelines('');
         }
+
+        // Carrega último treino para referência
+        const currentWorkouts = await db.getWorkouts(student.id);
+        if (currentWorkouts.length > 0) {
+            setExercises(currentWorkouts[0].exercises);
+            setWorkoutTitle(currentWorkouts[0].title);
+        } else {
+            setExercises([]);
+            setWorkoutTitle('Ficha de Treino Principal');
+        }
+
         setBuilderState('manage');
     };
 
     const handleSaveWorkout = async () => {
         if (!selectedStudent) return;
-        await db.saveWorkout({
-            id: Date.now().toString(),
-            userId: selectedStudent.id,
-            trainerId: user.id,
-            sportType: workoutSport,
-            split: workoutSplit,
-            title: workoutTitle,
-            exercises: exercises,
-            assignedDate: new Date().toISOString(),
-            estimatedCalories: 300,
-            durationMinutes: 60
-        });
-        alert('Treino salvo com sucesso no sistema!');
-        setBuilderState('manage');
+        try {
+            await db.saveWorkout({
+                id: Date.now().toString(),
+                userId: selectedStudent.id,
+                trainerId: user.id,
+                sportType: workoutSport,
+                split: workoutSplit,
+                title: workoutTitle,
+                exercises: exercises,
+                assignedDate: new Date().toISOString(),
+                estimatedCalories: 300,
+                durationMinutes: 60
+            });
+            alert('Treino salvo e sincronizado com o Amigo Platinum!');
+            setBuilderState('manage');
+        } catch (e) {
+            alert('Erro ao salvar treino.');
+        }
     };
 
     const handleSaveDiet = async () => {
@@ -107,6 +124,28 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
         } catch (e) {
             alert('Erro ao salvar dieta. Verifique sua conexão.');
         }
+    };
+
+    const addExercise = () => {
+        const newEx: Exercise = {
+            id: Date.now().toString(),
+            name: 'Novo Exercício',
+            type: 'strength',
+            sets: 3,
+            reps: '12',
+            load: '0kg',
+            rest: '60s',
+            completed: false
+        };
+        setExercises([...exercises, newEx]);
+    };
+
+    const removeExercise = (id: string) => {
+        setExercises(exercises.filter(e => e.id !== id));
+    };
+
+    const updateExercise = (id: string, field: string, value: any) => {
+        setExercises(exercises.map(e => e.id === id ? { ...e, [field]: value } : e));
     };
 
     if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600" /></div>;
@@ -187,6 +226,72 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                     </div>
                 );
             }
+
+            if (builderState === 'workout' && selectedStudent) {
+                return (
+                    <div className="space-y-8 animate-fade-in pb-20">
+                        <div className="flex justify-between items-center">
+                            <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
+                            <button onClick={handleSaveWorkout} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black flex items-center gap-2 shadow-xl hover:scale-105 transition-all">
+                                <Save className="w-5 h-5" /> Salvar Treino
+                            </button>
+                        </div>
+
+                        <div className="bg-white p-10 rounded-[2.5rem] border shadow-sm space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase">Título da Ficha</label>
+                                    <input className="w-full p-4 bg-slate-50 rounded-xl font-bold outline-none" value={workoutTitle} onChange={e => setWorkoutTitle(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase">Grupamento/Letra</label>
+                                    <input className="w-full p-4 bg-slate-50 rounded-xl font-bold outline-none" value={workoutSplit} onChange={e => setWorkoutSplit(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase">Modalidade</label>
+                                    <select className="w-full p-4 bg-slate-50 rounded-xl font-bold outline-none" value={workoutSport} onChange={e => setWorkoutSport(e.target.value as SportType)}>
+                                        {Object.values(SportType).map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center px-4">
+                                <h3 className="font-black text-slate-900">Lista de Exercícios</h3>
+                                <button onClick={addExercise} className="text-indigo-600 font-black text-sm flex items-center gap-1 hover:underline"><Plus className="w-4 h-4"/> Adicionar Exercício</button>
+                            </div>
+
+                            {exercises.length === 0 ? (
+                                <div className="bg-white p-12 rounded-[2.5rem] border-2 border-dashed border-slate-100 text-center">
+                                    <Dumbbell className="w-12 h-12 text-slate-100 mx-auto mb-4" />
+                                    <p className="text-slate-400 font-bold">Nenhum exercício adicionado ainda.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {exercises.map((ex, idx) => (
+                                        <div key={ex.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6 group hover:border-indigo-200 transition-all">
+                                            <div className="flex-1 space-y-4">
+                                                <div className="flex items-center gap-4">
+                                                    <span className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center font-black text-slate-400">{idx + 1}</span>
+                                                    <input className="flex-1 bg-transparent border-b border-transparent focus:border-indigo-500 outline-none font-black text-lg text-slate-900" value={ex.name} onChange={e => updateExercise(ex.id, 'name', e.target.value)} />
+                                                </div>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                    <ExMiniInput label="Séries" value={ex.sets} onChange={v => updateExercise(ex.id, 'sets', parseInt(v))} />
+                                                    <ExMiniInput label="Reps/Tempo" value={ex.reps} onChange={v => updateExercise(ex.id, 'reps', v)} />
+                                                    <ExMiniInput label="Carga" value={ex.load} onChange={v => updateExercise(ex.id, 'load', v)} />
+                                                    <ExMiniInput label="Descanso" value={ex.rest} onChange={v => updateExercise(ex.id, 'rest', v)} />
+                                                </div>
+                                            </div>
+                                            <button onClick={() => removeExercise(ex.id)} className="p-4 text-slate-200 hover:text-rose-500 transition-colors"><Trash2 /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
             
             if (builderState === 'evolution' && selectedStudent) {
                  return (
@@ -197,16 +302,16 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                             {evolutionLogs.map(log => (
                                 <div key={log.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                                     {log.photoUrl && <img src={log.photoUrl} className="aspect-[4/3] w-full object-cover" />}
-                                    <div className="p-8 space-y-4">
+                                    <div className="p-8 space-y-4 text-left">
                                         <div className="flex justify-between items-center border-b pb-4">
                                             <span className="text-sm font-black text-indigo-600">{new Date(log.date).toLocaleDateString()}</span>
                                             <span className="text-xl font-black">{log.weight}kg</span>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2 text-xs text-left">
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
                                             <div className="p-2 bg-slate-50 rounded-lg">Cintura: {log.measurements?.waist}cm</div>
                                             <div className="p-2 bg-slate-50 rounded-lg">Quadril: {log.measurements?.hips}cm</div>
                                         </div>
-                                        {log.notes && <p className="text-xs text-slate-500 italic text-left">"{log.notes}"</p>}
+                                        {log.notes && <p className="text-xs text-slate-500 italic">"{log.notes}"</p>}
                                     </div>
                                 </div>
                             ))}
@@ -218,10 +323,9 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             if (builderState === 'diet' && selectedStudent) {
                 return (
                     <div className="space-y-8 animate-fade-in pb-20">
-                        <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <h2 className="text-2xl font-black text-slate-900">Plano Alimentar para {selectedStudent.name}</h2>
-                            <button onClick={handleSaveDiet} className="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl hover:bg-emerald-700 transition-all"><Save /> Salvar e Enviar</button>
+                        <div className="flex justify-between items-center">
+                            <button onClick={() => setBuilderState('manage')} className="flex items-center gap-2 text-slate-400 font-bold hover:text-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /> Voltar</button>
+                            <button onClick={handleSaveDiet} className="bg-emerald-600 text-white px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 shadow-xl hover:bg-emerald-700 transition-all"><Save /> Salvar Dieta</button>
                         </div>
                         
                         <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm">
@@ -241,16 +345,6 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
                             <MealEditor label="Jantar" icon={Soup} color="text-rose-500" value={meals.dinner} onChange={(v:string) => setMeals({...meals, dinner: v})} />
                             <MealEditor label="Ceia" icon={Moon} color="text-slate-900" value={meals.supper} onChange={(v:string) => setMeals({...meals, supper: v})} />
                         </div>
-                        
-                        <div className="bg-white p-8 rounded-[2.5rem] border shadow-sm">
-                            <label className="text-xs font-black uppercase text-slate-400 block mb-4 ml-1">Orientações Extras</label>
-                            <textarea 
-                                className="w-full min-h-[120px] p-5 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 resize-none" 
-                                placeholder="Ex: Beber 3 litros de água, evitar refrigerantes..."
-                                value={dietGuidelines}
-                                onChange={e => setDietGuidelines(e.target.value)}
-                            />
-                        </div>
                     </div>
                 );
             }
@@ -260,6 +354,13 @@ export const TrainerViewContent: React.FC<TrainerViewProps> = ({ user, activeTab
             return <div className="p-20 text-center text-slate-400 font-bold">Módulo em desenvolvimento.</div>;
     }
 };
+
+const ExMiniInput = ({ label, value, onChange }: any) => (
+    <div className="text-left">
+        <label className="text-[8px] font-black uppercase text-slate-300 block mb-1">{label}</label>
+        <input className="w-full bg-slate-50 p-2 rounded-lg text-xs font-bold outline-none focus:bg-indigo-50" value={value} onChange={e => onChange(e.target.value)} />
+    </div>
+);
 
 const StatCard = ({ label, value, icon: Icon, color }: any) => (
     <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6 group hover:shadow-md transition-all text-left">
@@ -327,7 +428,7 @@ const TrainerChatView = ({ students, user }: { students: User[], user: User }) =
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic text-center p-10"><MessageCircle className="w-16 h-16 opacity-10" /><p>Selecione um Amigo Platinum para conversar e fornecer suporte.</p></div>
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-4 italic text-center p-10"><MessageCircle className="w-16 h-16 opacity-10" /><p>Selecione um Amigo Platinum para conversar.</p></div>
                 )}
             </div>
         </div>
