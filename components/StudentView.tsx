@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ChatMessage, ReadingPlan, BookReview } from '../types';
+import { User, UserProfile, WorkoutPlan, DietPlan, ProgressLog, ChatMessage, ReadingPlan, BookReview, Exercise } from '../types';
 import { db } from '../services/storage';
 import { 
     CheckCircle, Trophy, Activity, Dumbbell, Utensils,
     Flame, Send, Scale, Camera, Plus, BookOpen, 
     Quote, Sparkles, ChevronRight, Layers, X, Save, Loader2, ArrowLeft,
     MessageCircle, MessageSquare, Info, Star, Filter, SortAsc, BookPlus, Edit2, Medal, 
-    Check, ChevronDown, TrendingUp, ImageIcon, Sunrise, Sun, Coffee, Soup, Moon, Ruler
+    Check, ChevronDown, TrendingUp, ImageIcon, Sunrise, Sun, Coffee, Soup, Moon, Ruler,
+    Play, Pause, ChevronLeft, Timer, List, Zap, Clock
 } from 'lucide-react';
 
 const BIBLE_STRUCTURE: Record<string, number> = {
@@ -129,7 +130,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
             );
 
         case 'workouts': 
-            return <div className="space-y-6 pb-20"><BackButton /><WorkoutView workouts={workouts} user={user} /></div>;
+            return <WorkoutView workouts={workouts} user={user} onBack={() => onTabChange('dashboard')} />;
 
         case 'diet':
             return <div className="space-y-6 pb-20"><BackButton /><DietView diet={diet} /></div>;
@@ -155,6 +156,235 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 };
 
 // --- SUB-VIEWS ---
+
+const WorkoutView = ({ workouts, onBack }: { workouts: WorkoutPlan[], user: User, onBack: () => void }) => {
+    const [isStarted, setIsStarted] = useState(false);
+    const [activeWorkout, setActiveWorkout] = useState<WorkoutPlan | null>(null);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [completedSets, setCompletedSets] = useState<Record<string, number>>({});
+    const [timer, setTimer] = useState(0);
+    const timerRef = useRef<any>(null);
+
+    useEffect(() => {
+        if (isStarted) {
+            timerRef.current = setInterval(() => setTimer(t => t + 1), 1000);
+        } else {
+            clearInterval(timerRef.current);
+        }
+        return () => clearInterval(timerRef.current);
+    }, [isStarted]);
+
+    const formatTime = (s: number) => {
+        const hrs = Math.floor(s / 3600);
+        const mins = Math.floor((s % 3600) / 60);
+        const secs = s % 60;
+        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const handleStartWorkout = (workout: WorkoutPlan) => {
+        setActiveWorkout(workout);
+        setIsStarted(true);
+        setCurrentIndex(0);
+        setTimer(0);
+    };
+
+    const toggleSet = (exerciseId: string, setIndex: number) => {
+        const key = `${exerciseId}-${setIndex}`;
+        setCompletedSets(prev => ({
+            ...prev,
+            [key]: prev[key] ? 0 : 1
+        }));
+    };
+
+    const currentExercise = activeWorkout?.exercises[currentIndex];
+
+    // Estilo "Orange Theme" para botões de ação inspirados nas imagens
+    const primaryColor = "bg-amber-500 hover:bg-amber-600";
+    const primaryText = "text-amber-500";
+
+    if (isStarted && activeWorkout && currentExercise) {
+        return (
+            <div className="fixed inset-0 z-[60] bg-white flex flex-col animate-fade-in">
+                {/* Header do Treino */}
+                <div className="bg-amber-500 p-8 pt-12 pb-10 text-white rounded-b-[3rem] shadow-xl relative">
+                    <button onClick={() => setIsStarted(false)} className="absolute left-6 top-10 p-2 hover:bg-white/20 rounded-full transition-all">
+                        <ChevronLeft className="w-8 h-8" />
+                    </button>
+                    <div className="text-center">
+                        <h2 className="text-2xl font-black">{activeWorkout.title}</h2>
+                        <p className="font-mono text-xl opacity-90 tracking-widest">{formatTime(timer)}</p>
+                    </div>
+                    <button className="absolute right-6 top-10 p-2 hover:bg-white/20 rounded-full transition-all">
+                        <List className="w-7 h-7" />
+                    </button>
+                </div>
+
+                {/* Conteúdo do Exercício */}
+                <div className="flex-1 overflow-y-auto px-6 py-8 space-y-8 custom-scrollbar">
+                    <div className="bg-white rounded-[3rem] p-8 shadow-2xl border border-slate-50 flex flex-col items-center text-center">
+                        <h3 className="text-2xl font-black text-slate-900 mb-2">{currentExercise.name}</h3>
+                        <div className="flex gap-4 mb-6">
+                            <span className="bg-slate-100 px-4 py-1.5 rounded-full text-xs font-black text-slate-500 uppercase tracking-widest">Séries: {currentExercise.sets}</span>
+                            <span className="bg-slate-100 px-4 py-1.5 rounded-full text-xs font-black text-slate-500 uppercase tracking-widest">Descanso: {currentExercise.rest}</span>
+                        </div>
+
+                        {/* Ilustração / Placeholder */}
+                        <div className="w-full aspect-square bg-slate-50 rounded-[2.5rem] mb-8 flex items-center justify-center relative overflow-hidden group">
+                            <img src={`https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=500&auto=format&fit=crop`} alt="Musculação" className="w-full h-full object-cover opacity-80" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent"></div>
+                            <Dumbbell className="w-24 h-24 text-white/50 absolute" />
+                        </div>
+
+                        {/* Set Tracker */}
+                        <div className="flex gap-3 mb-10">
+                            {Array.from({ length: currentExercise.sets || 1 }).map((_, i) => {
+                                const isDone = completedSets[`${currentExercise.id}-${i}`];
+                                return (
+                                    <button 
+                                        key={i} 
+                                        onClick={() => toggleSet(currentExercise.id, i)}
+                                        className={`w-14 h-14 rounded-full font-black text-lg transition-all border-4 ${
+                                            isDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-slate-50 border-slate-100 text-slate-300'
+                                        }`}
+                                    >
+                                        {isDone ? <Check className="w-7 h-7 mx-auto" /> : i + 1}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className="grid grid-cols-2 w-full gap-8 border-t border-slate-100 pt-8">
+                            <div className="text-left">
+                                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Repetições</p>
+                                <p className="text-2xl font-black text-slate-800">{currentExercise.reps || '-'}</p>
+                            </div>
+                            <div className="text-left">
+                                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Carga Atual</p>
+                                <p className="text-2xl font-black text-slate-800">{currentExercise.load || '0kg'}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                         <ExerciseActionBtn icon={Zap} label="Execução" />
+                         <ExerciseActionBtn icon={Activity} label="Músculos" />
+                         <ExerciseActionBtn icon={Plus} label="Ampliar" />
+                    </div>
+                </div>
+
+                {/* Bottom Navigation Control - Inspirado na Imagem */}
+                <div className="p-8 pt-4 pb-12 bg-white flex flex-col items-center">
+                    <div className="flex items-center gap-8 mb-6">
+                        <button 
+                            disabled={currentIndex === 0}
+                            onClick={() => setCurrentIndex(currentIndex - 1)}
+                            className="w-14 h-14 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center disabled:opacity-20 transition-all active:scale-90"
+                        >
+                            <ChevronLeft className="w-8 h-8" />
+                        </button>
+                        
+                        <button 
+                            onClick={() => {
+                                if (currentIndex < activeWorkout.exercises.length - 1) {
+                                    setCurrentIndex(currentIndex + 1);
+                                } else {
+                                    alert('Treino concluído! Parabéns!');
+                                    setIsStarted(false);
+                                }
+                            }}
+                            className="w-28 h-28 rounded-full bg-amber-500 text-white flex flex-col items-center justify-center shadow-2xl shadow-amber-200 border-[6px] border-white transition-all active:scale-95"
+                        >
+                            <Check className="w-10 h-10 mb-1" />
+                            <span className="text-[10px] font-black uppercase">Realizado</span>
+                        </button>
+
+                        <button 
+                            onClick={() => {
+                                if (currentIndex < activeWorkout.exercises.length - 1) {
+                                    setCurrentIndex(currentIndex + 1);
+                                } else {
+                                    alert('Treino concluído!');
+                                    setIsStarted(false);
+                                }
+                            }}
+                            className="w-14 h-14 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center transition-all active:scale-90"
+                        >
+                            <Play className="w-8 h-8" />
+                        </button>
+                    </div>
+
+                    <div className="flex gap-4">
+                        <button className="p-4 bg-slate-50 text-slate-400 rounded-full"><List className="w-6 h-6"/></button>
+                        <button onClick={() => setIsStarted(false)} className="px-8 py-4 bg-amber-50 text-amber-600 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-2">
+                             <Zap className="w-4 h-4" /> Finalizar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-8 animate-fade-in pb-20 text-left">
+            <div className="flex justify-between items-center mb-8">
+                <div>
+                    <h2 className="text-4xl font-black text-slate-900 leading-none">Meus Treinos</h2>
+                    <p className="text-slate-400 font-medium mt-2">Escolha sua ficha e comece o movimento.</p>
+                </div>
+                <button onClick={onBack} className="p-3 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-indigo-600 shadow-sm transition-all"><X /></button>
+            </div>
+
+            {workouts.length === 0 ? (
+                <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100 shadow-sm">
+                    <Dumbbell className="w-20 h-20 text-slate-100 mx-auto mb-6" />
+                    <p className="text-slate-400 font-bold text-lg">Ainda não há treinos prescritos para você.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {workouts.map((w) => (
+                        <div key={w.id} className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all">
+                            <div className="p-8 pb-4">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 shadow-sm group-hover:scale-110 transition-transform">
+                                        <Zap className="w-8 h-8" />
+                                    </div>
+                                    <span className="bg-slate-900 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">{w.sportType}</span>
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-900 mb-2">{w.title}</h3>
+                                <p className="text-sm text-slate-400 font-bold uppercase tracking-tighter mb-6">{w.exercises.length} Exercícios • Grapamento {w.split || 'A'}</p>
+                                
+                                <div className="space-y-3 mb-8">
+                                    {w.exercises.slice(0, 3).map((ex, idx) => (
+                                        <div key={idx} className="flex items-center gap-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                                            <span className="text-sm font-bold text-slate-600 truncate">{ex.name}</span>
+                                        </div>
+                                    ))}
+                                    {w.exercises.length > 3 && <p className="text-xs font-black text-slate-300 pl-4">+ {w.exercises.length - 3} outros</p>}
+                                </div>
+                            </div>
+                            <div className="p-4 bg-slate-50 mt-auto">
+                                <button 
+                                    onClick={() => handleStartWorkout(w)}
+                                    className="w-full bg-amber-500 hover:bg-amber-600 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl shadow-amber-100 transition-all flex items-center justify-center gap-3 group-hover:translate-y-[-4px]"
+                                >
+                                    <Play className="w-6 h-6" /> Iniciar Treino
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ExerciseActionBtn = ({ icon: Icon, label }: any) => (
+    <button className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 rounded-3xl text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-all border border-transparent hover:border-amber-100">
+        <Icon className="w-5 h-5" />
+        <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+    </button>
+);
 
 const LibraryView = ({ user, profile, reviews, onUpdate }: any) => {
     const [view, setView] = useState<'shelf' | 'community' | 'add'>('shelf');
@@ -229,7 +459,7 @@ const LibraryView = ({ user, profile, reviews, onUpdate }: any) => {
     };
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-8 animate-fade-in text-left">
             <div className="flex justify-between items-center">
                 <h2 className="text-4xl font-black text-slate-900">Biblioteca</h2>
                 <button onClick={() => { setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 }); setView('add'); }} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 hover:scale-105 transition-all shadow-xl">
@@ -439,7 +669,7 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                             </div>
 
                             <button onClick={handleSave} className="w-full bg-slate-900 text-white py-6 rounded-2xl font-black text-xl shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
-                                <Save className="w-6 h-6" /> Salvar Minha Evolução
+                                <CheckCircle className="w-6 h-6" /> Salvar Minha Evolução
                             </button>
                         </div>
                     </div>
@@ -538,33 +768,6 @@ const ChatView = ({ user, trainer, onMessageSent }: any) => {
             <div className="p-8 flex gap-4">
                 <input className="flex-1 bg-slate-50 p-5 rounded-[2rem] outline-none font-bold focus:bg-white border-2 border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Escreva para o moderador..." value={input} onChange={e => setInput(e.target.value)} />
                 <button onClick={async () => { if(input && trainer) { await db.sendMessage({ id: Date.now().toString(), senderId: user.id, receiverId: trainer.id, content: input, timestamp: new Date().toISOString(), read: false }); setInput(''); loadMsgs(); onMessageSent(); } }} className="bg-indigo-600 text-white p-5 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all"><Send /></button>
-            </div>
-        </div>
-    );
-};
-
-const WorkoutView = ({ workouts }: any) => {
-    const [activeSplit, setActiveSplit] = useState(workouts[0]?.id || '');
-    const currentWorkout = workouts.find((w: any) => w.id === activeSplit) || workouts[0];
-    if (!currentWorkout) return <div className="bg-white p-20 rounded-[3rem] text-center border border-slate-100"><Dumbbell className="w-16 h-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-400 font-bold">Sem treinos prescritos.</p></div>;
-    return (
-        <div className="space-y-6 text-left">
-            <h2 className="text-4xl font-black text-slate-900 mb-8">Meus Treinos</h2>
-            <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
-                {workouts.map((w: any) => (
-                    <button key={w.id} onClick={() => setActiveSplit(w.id)} className={`px-8 py-4 rounded-2xl font-black border-2 shrink-0 ${activeSplit === w.id ? 'bg-slate-900 border-slate-900 text-white shadow-xl' : 'bg-white text-slate-400 border-slate-50'}`}>{w.split || 'Treino'}</button>
-                ))}
-            </div>
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
-                <h3 className="text-3xl font-black text-slate-900 mb-10">{currentWorkout.title}</h3>
-                <div className="space-y-4">
-                    {currentWorkout.exercises.map((ex: any, idx: number) => (
-                        <div key={ex.id} className="p-6 bg-slate-50 rounded-[2rem] flex items-center justify-between group">
-                            <div className="flex items-center gap-6"><div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center font-black text-slate-300">{idx + 1}</div><div><p className="font-black text-lg text-slate-900">{ex.name}</p><p className="text-xs text-slate-400 font-black uppercase">{ex.sets} séries • {ex.reps || ex.distance} • {ex.load || ex.pace}</p></div></div>
-                            <button className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-200 hover:text-emerald-500 transition-all"><CheckCircle className="w-6 h-6" /></button>
-                        </div>
-                    ))}
-                </div>
             </div>
         </div>
     );
