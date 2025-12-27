@@ -44,6 +44,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
     const [workouts, setWorkouts] = useState<WorkoutPlan[]>([]);
     const [diet, setDiet] = useState<DietPlan | undefined>();
     const [progress, setProgress] = useState<ProgressLog[]>([]);
+    const [reviews, setReviews] = useState<BookReview[]>([]);
     const [communityPosts, setCommunityPosts] = useState<any[]>([]);
     const [leaderboard, setLeaderboard] = useState<(UserProfile & { userName: string, avatarUrl?: string })[]>([]);
     const [trainer, setTrainer] = useState<User | undefined>();
@@ -58,6 +59,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
             const w = await db.getWorkouts(user.id);
             const d = await db.getDiet(user.id);
             const c = await db.getCommunityPosts();
+            const r = await db.getBookReviews();
             const prog = await db.getProgress(user.id);
             
             setTrainer(foundTrainer);
@@ -66,6 +68,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
             setWorkouts(w);
             setDiet(d);
             setCommunityPosts(c);
+            setReviews(r);
             setProgress(prog);
         } catch (e) {
             console.error("Erro ao sincronizar dados:", e);
@@ -76,10 +79,9 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 
     useEffect(() => {
         loadData();
-        // Polling mais frequente para garantir sincronia entre dispositivos
         const interval = setInterval(loadData, 5000); 
         return () => clearInterval(interval);
-    }, [user.id, activeTab]);
+    }, [user.id]);
 
     if (loading && !profile) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600" /></div>;
     if (!profile) return null;
@@ -136,8 +138,7 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
             return <EvolutionView progress={progress} user={user} profile={profile} onUpdate={loadData} onBack={() => onTabChange('dashboard')} />;
 
         case 'library':
-            // Pass activeTab to LibraryView component
-            return <div className="space-y-6 pb-20"><BackButton /><LibraryView user={user} profile={profile} onUpdate={loadData} activeTab={activeTab} /></div>;
+            return <div className="space-y-6 pb-20"><BackButton /><LibraryView user={user} profile={profile} reviews={reviews} onUpdate={loadData} /></div>;
 
         case 'spiritual':
             return <div className="space-y-6 pb-20"><BackButton /><SpiritualView user={user} profile={profile} leaderboard={leaderboard} onUpdate={loadData} /></div>;
@@ -155,13 +156,10 @@ export const StudentViewContent: React.FC<StudentViewProps> = ({ activeTab, user
 
 // --- SUB-VIEWS ---
 
-// Add activeTab to props list
-const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
+const LibraryView = ({ user, profile, reviews, onUpdate }: any) => {
     const [view, setView] = useState<'shelf' | 'community' | 'add'>('shelf');
     const [sortBy, setSortBy] = useState<'title' | 'author' | 'category'>('title');
     const [filterCategory, setFilterCategory] = useState<string>('all');
-    const [allReviews, setAllReviews] = useState<BookReview[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     
     const categories = ['Espiritualidade', 'Desenvolvimento Pessoal', 'Saúde & Fitness', 'Biografia', 'Ficção', 'Negócios', 'Outros'];
 
@@ -169,27 +167,16 @@ const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
         id: '', title: '', author: '', review: '', category: categories[0], rating: 5 
     });
 
-    const loadReviews = async () => {
-        setIsLoading(true);
-        const reviews = await db.getBookReviews();
-        setAllReviews(reviews);
-        setIsLoading(false);
-    };
-
-    useEffect(() => {
-        loadReviews();
-    }, [view, activeTab]); // Recarrega quando mudar de aba ou visualização
-
-    const filteredReviews = allReviews
-        .filter(r => {
+    const filteredReviews = reviews
+        .filter((r: BookReview) => {
             if (view === 'shelf') return r.userId === user.id;
-            return true; // Comunidade mostra TODOS
+            return true; // Comunidade mostra TODOS os livros de TODOS
         })
-        .filter(r => {
+        .filter((r: BookReview) => {
             if (filterCategory === 'all') return true;
             return (r.category || 'Outros') === filterCategory;
         })
-        .sort((a, b) => {
+        .sort((a: BookReview, b: BookReview) => {
             if (sortBy === 'title') return a.title.localeCompare(b.title);
             if (sortBy === 'author') return (a.author || '').localeCompare(b.author || '');
             if (sortBy === 'category') return (a.category || 'Outros').localeCompare(b.category || 'Outros');
@@ -213,7 +200,6 @@ const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
         await db.saveBookReview(reviewData);
         setNewBook({ id: '', title: '', author: '', review: '', category: categories[0], rating: 5 });
         setView('shelf');
-        await loadReviews();
         onUpdate();
     };
 
@@ -239,7 +225,7 @@ const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
             comments: []
         });
         alert('Livro adicionado à sua estante!');
-        loadReviews();
+        onUpdate();
     };
 
     return (
@@ -284,13 +270,13 @@ const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
                             <input placeholder="Título do Livro" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} />
                             <input placeholder="Autor" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-indigo-500 transition-all" value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} />
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Categoria</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Categoria</label>
                                 <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newBook.category} onChange={e => setNewBook({...newBook, category: e.target.value})}>
                                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Avaliação</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Avaliação</label>
                                 <div className="flex gap-2 bg-slate-50 p-4 rounded-2xl">
                                     {[1,2,3,4,5].map(s => (
                                         <button key={s} onClick={() => setNewBook({...newBook, rating: s})} className={`transition-all ${s <= newBook.rating ? 'text-amber-400 scale-110' : 'text-slate-200'}`}><Star className="fill-current w-6 h-6" /></button>
@@ -304,8 +290,6 @@ const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
                         {newBook.id ? 'Salvar Alterações' : 'Publicar na Minha Estante'}
                     </button>
                 </div>
-            ) : isLoading ? (
-                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {filteredReviews.length === 0 ? (
@@ -313,7 +297,7 @@ const LibraryView = ({ user, profile, onUpdate, activeTab }: any) => {
                             <BookOpen className="w-12 h-12 text-slate-100 mx-auto mb-4" />
                             <p className="text-slate-400 font-bold italic">Nenhum livro encontrado nesta seção.</p>
                         </div>
-                    ) : filteredReviews.map(r => (
+                    ) : filteredReviews.map((r: BookReview) => (
                         <div key={r.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col hover:shadow-xl transition-all group relative">
                             <div className="mb-4 flex justify-between items-start">
                                 <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{r.category || 'Outros'}</span>
@@ -438,10 +422,10 @@ const EvolutionView = ({ progress, user, profile, onUpdate, onBack }: any) => {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <MeasurementInput label="Cintura" value={newLog.measurements.waist} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, waist: v } })} />
-                                <MeasurementInput label="Quadril" value={newLog.measurements.hips} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, hips: v } })} />
-                                <MeasurementInput label="Braço" value={newLog.measurements.arm} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, arm: v } })} />
-                                <MeasurementInput label="Perna" value={newLog.measurements.leg} onChange={v => setNewLog({ ...newLog, measurements: { ...newLog.measurements, leg: v } })} />
+                                <MeasurementInput label="Cintura" value={newLog.measurements.waist} onChange={(v:any) => setNewLog({ ...newLog, measurements: { ...newLog.measurements, waist: v } })} />
+                                <MeasurementInput label="Quadril" value={newLog.measurements.hips} onChange={(v:any) => setNewLog({ ...newLog, measurements: { ...newLog.measurements, hips: v } })} />
+                                <MeasurementInput label="Braço" value={newLog.measurements.arm} onChange={(v:any) => setNewLog({ ...newLog, measurements: { ...newLog.measurements, arm: v } })} />
+                                <MeasurementInput label="Perna" value={newLog.measurements.leg} onChange={(v:any) => setNewLog({ ...newLog, measurements: { ...newLog.measurements, leg: v } })} />
                             </div>
 
                             <div>
@@ -599,10 +583,10 @@ const DietView = ({ diet }: any) => {
         <div className="space-y-10 animate-fade-in">
             <h2 className="text-4xl font-black text-slate-900">Alimentação</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <MacroCard label="Calorias" value={diet.macros.calories} unit="kcal" color="bg-indigo-500" />
-                <MacroCard label="Proteínas" value={diet.macros.protein} unit="g" color="bg-rose-500" />
-                <MacroCard label="Carbos" value={diet.macros.carbs} unit="g" color="bg-amber-500" />
-                <MacroCard label="Gorduras" value={diet.macros.fats} unit="g" color="bg-emerald-500" />
+                <MacroCard label="Calorias" value={diet.macros?.calories || 0} unit="kcal" color="bg-indigo-500" />
+                <MacroCard label="Proteínas" value={diet.macros?.protein || 0} unit="g" color="bg-rose-500" />
+                <MacroCard label="Carbos" value={diet.macros?.carbs || 0} unit="g" color="bg-amber-500" />
+                <MacroCard label="Gorduras" value={diet.macros?.fats || 0} unit="g" color="bg-emerald-500" />
             </div>
             <div className="space-y-6">
                 {mealList.map(m => {
